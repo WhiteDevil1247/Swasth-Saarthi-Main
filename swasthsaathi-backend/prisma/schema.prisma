@@ -24,7 +24,7 @@ model User {
 
 model Profile {
   id                  Int      @id @default(autoincrement())
-  userId              String   @unique
+  userId              String   @unique @map("user_id")
   user                User     @relation(fields: [userId], references: [id])
   full_name           String?
   email               String?
@@ -71,7 +71,7 @@ model Ngo {
 
 model Appointment {
   id          Int      @id @default(autoincrement())
-  userId      String
+  userId      String   @map("user_id")
   user        User     @relation(fields: [userId], references: [id])
   provider    String?
   reason      String?
@@ -87,7 +87,7 @@ model Appointment {
 
 model Metric {
   id          Int      @id @default(autoincrement())
-  userId      String
+  userId      String   @map("user_id")
   user        User     @relation(fields: [userId], references: [id])
   type        String
   value       Float?

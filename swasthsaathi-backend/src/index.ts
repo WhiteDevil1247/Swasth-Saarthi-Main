@@ -17,6 +17,7 @@ import { ChatLog } from './models/ChatLog';
 import QRCode from 'qrcode';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import { encryptString, decryptString, encryptJSON } from './lib/crypto';
 
 const app = express();
 const server = http.createServer(app);
@@ -87,11 +88,16 @@ app.post('/api/auth/request-otp', (req: Request, res: Response) => {
 });
 
 const OtpVerify = z.object({ phone: z.string().min(6), code: z.string().min(4) });
-app.post('/api/auth/verify', (req: Request, res: Response) => {
+app.post('/api/auth/verify', async (req: Request, res: Response) => {
   const parsed = OtpVerify.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
   const { phone, code } = parsed.data;
   if (code !== '123456') return res.status(401).json({ error: 'Invalid code' });
+  // Ensure user exists in database
+  if (process.env.DATABASE_URL) {
+    const prisma = getPrisma();
+    await prisma.user.upsert({ where: { phone }, create: { phone }, update: {} });
+  }
   const token = jwt.sign({ sub: phone, role: 'user' }, process.env.JWT_SECRET || 'devsecret', { expiresIn: '1h' });
   res.json({ token });
 });
@@ -246,17 +252,20 @@ app.post('/api/ngos', verifyJWT, async (req: Request, res: Response) => {
 app.get('/api/qr/emergency', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const prisma = getPrisma();
-  const prof = await prisma.profile.findUnique({ where: { userId }, select: { full_name: true, blood_group: true, emergency_contact: true } });
-  const payload = {
-    id: userId,
-    name: prof?.full_name || 'Unknown',
-    blood_group: prof?.blood_group || 'NA',
-    emergency_contact: prof?.emergency_contact || 'NA',
-    profile_url: `${FRONTEND_ORIGIN}/settings`,
-  };
-  const qrDataUrl = await QRCode.toDataURL(JSON.stringify(payload));
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const prof = await prisma.profile.findUnique({ where: { userId: userRecord.id }, select: { full_name: true, blood_group: true, emergency_contact: true } });
+  let name = prof?.full_name || 'Unknown';
+  let blood = (prof as any)?.blood_group || 'NA';
+  let emer = (prof as any)?.emergency_contact || 'NA';
+  try {
+    blood = (prof as any)?.blood_group ? decryptString((prof as any).blood_group) : blood;
+    emer = (prof as any)?.emergency_contact ? decryptString((prof as any).emergency_contact) : emer;
+  } catch {}
+  const encryptedPayload = encryptJSON({ id: userRecord.id, name, blood_group: blood, emergency_contact: emer, profile_url: `${FRONTEND_ORIGIN}/settings` });
+  const qrDataUrl = await QRCode.toDataURL(encryptedPayload);
   res.json({ qrDataUrl });
 });
 
@@ -296,22 +305,61 @@ const pg = process.env.DATABASE_URL ? getPgPool() : null as any; // retained for
 app.get('/api/profile', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const prisma = getPrisma();
-  const prof = await prisma.profile.findUnique({ where: { userId } });
-  res.json(prof ?? null);
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.json(null);
+  const prof = await prisma.profile.findUnique({ where: { userId: userRecord.id } });
+  if (!prof) return res.json(null);
+  try {
+    const decrypted = {
+      ...prof,
+      email: prof.email ? decryptString(prof.email) : null,
+      phone: prof.phone ? decryptString(prof.phone) : null,
+      blood_group: prof as any && (prof as any).blood_group ? decryptString((prof as any).blood_group) : (prof as any).blood_group ?? null,
+      emergency_contact: (prof as any).emergency_contact ? decryptString((prof as any).emergency_contact) : null,
+      address: (prof as any).address ? decryptString((prof as any).address) : null,
+      allergies: (prof as any).allergies ? decryptString((prof as any).allergies) : null,
+      medical_conditions: (prof as any).medical_conditions ? decryptString((prof as any).medical_conditions) : null,
+    } as any;
+    return res.json(decrypted);
+  } catch {
+    // If decryption fails (e.g., key missing), return as-is
+    return res.json(prof);
+  }
 });
 
 app.put('/api/profile', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
-  const { full_name, email, phone } = req.body || {};
+  const { full_name, email, phone, blood_group, emergency_contact, address, allergies, medical_conditions } = req.body || {};
   const prisma = getPrisma();
+  
+  // Ensure user exists first
+  const existingUser = await prisma.user.findUnique({ where: { phone: userId } });
+  if (!existingUser) {
+    await prisma.user.create({ data: { phone: userId } });
+  }
+  const userRecord = await prisma.user.findUnique({ where: { phone: userId } });
+  if (!userRecord) return res.status(500).json({ error: 'User creation failed' });
+  
+  let encEmail = email, encPhone = phone, encBlood = blood_group, encEmer = emergency_contact, encAddr = address, encAll = allergies, encCond = medical_conditions;
+  try {
+    encEmail = email != null ? encryptString(String(email)) : null;
+    encPhone = phone != null ? encryptString(String(phone)) : null;
+    encBlood = blood_group != null ? encryptString(String(blood_group)) : null;
+    encEmer = emergency_contact != null ? encryptString(String(emergency_contact)) : null;
+    encAddr = address != null ? encryptString(String(address)) : null;
+    encAll = allergies != null ? encryptString(String(allergies)) : null;
+    encCond = medical_conditions != null ? encryptString(String(medical_conditions)) : null;
+  } catch {
+    // if encryption fails due to key, fall back to plaintext
+  }
   const prof = await prisma.profile.upsert({
-    where: { userId },
-    update: { full_name, email, phone, updated_at: new Date() },
-    create: { userId, full_name, email, phone },
+    where: { userId: userRecord.id },
+    update: { full_name, email: encEmail, phone: encPhone, updated_at: new Date(), blood_group: encBlood, emergency_contact: encEmer, address: encAddr, allergies: encAll, medical_conditions: encCond },
+    create: { userId: userRecord.id, full_name, email: encEmail, phone: encPhone, blood_group: encBlood, emergency_contact: encEmer, address: encAddr, allergies: encAll, medical_conditions: encCond },
   });
   res.json(prof);
 });
@@ -335,9 +383,11 @@ const AppointmentUpdate = z.object({
 app.get('/api/appointments', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const prisma = getPrisma();
-  const rows = await prisma.appointment.findMany({ where: { userId }, orderBy: { start_time: 'desc' } });
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.json([]);
+  const rows = await prisma.appointment.findMany({ where: { userId: userRecord.id }, orderBy: { start_time: 'desc' } });
   const withSync = rows.map((r: any) => ({ ...r, synced: false }));
   res.json(withSync);
 });
@@ -345,24 +395,28 @@ app.get('/api/appointments', verifyJWT, async (req: Request, res: Response) => {
 app.post('/api/appointments', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const parsed = AppointmentCreate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
   const prisma = getPrisma();
-  const created = await prisma.appointment.create({ data: { userId, ...parsed.data } });
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const created = await prisma.appointment.create({ data: { userId: userRecord.id, ...parsed.data } });
   res.status(201).json(created);
 });
 
 app.patch('/api/appointments/:id', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = AppointmentUpdate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
   const prisma = getPrisma();
-  const { count } = await prisma.appointment.updateMany({ where: { id, userId }, data: parsed.data });
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const { count } = await prisma.appointment.updateMany({ where: { id, userId: userRecord.id }, data: parsed.data });
   if (count === 0) return res.status(404).json({ error: 'Not found' });
   const updated = await prisma.appointment.findUnique({ where: { id } });
   return res.json(updated);
@@ -371,11 +425,13 @@ app.patch('/api/appointments/:id', verifyJWT, async (req: Request, res: Response
 app.delete('/api/appointments/:id', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const prisma = getPrisma();
-  const { count } = await prisma.appointment.deleteMany({ where: { id, userId } });
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const { count } = await prisma.appointment.deleteMany({ where: { id, userId: userRecord.id } });
   if (count === 0) return res.status(404).json({ error: 'Not found' });
   res.status(204).send();
 });
@@ -385,13 +441,15 @@ const MetricsQuery = z.object({ type: z.string().optional(), limit: z.coerce.num
 app.get('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const parsed = MetricsQuery.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid query' });
   const { type, limit } = parsed.data;
   const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.json([]);
   const rows = await prisma.metric.findMany({
-    where: { userId, ...(type ? { type } : {}) },
+    where: { userId: userRecord.id, ...(type ? { type } : {}) },
     orderBy: { recorded_at: 'desc' },
     take: Math.min(limit ?? 50, 200),
   });
@@ -401,21 +459,25 @@ app.get('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
 app.post('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const { type, value } = req.body || {};
   const prisma = getPrisma();
-  const created = await prisma.metric.create({ data: { userId, type, value } });
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const created = await prisma.metric.create({ data: { userId: userRecord.id, type, value } });
   res.status(201).json(created);
 });
 
 app.delete('/api/metrics/:id', verifyJWT, async (req: Request, res: Response) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const prisma = getPrisma();
-  const { count } = await prisma.metric.deleteMany({ where: { id, userId } });
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const { count } = await prisma.metric.deleteMany({ where: { id, userId: userRecord.id } });
   if (count === 0) return res.status(404).json({ error: 'Not found' });
   res.status(204).send();
 });
