@@ -1,0 +1,37 @@
+/* Tailwind base (if configured), else keep as plain CSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 14 14 16;
+  --fg: 240 240 245;
+  --brand: 0 180 255;
+  --mx: -1000px; /* mouse x */
+  --my: -1000px; /* mouse y */
+}
+
+html, body, #root { height: 100%; }
+body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
+
+/* Neon brand */
+.neon-text { text-shadow: 0 0 6px rgba(0,180,255,.6), 0 0 16px rgba(0,180,255,.35); }
+
+/* Fade-in */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn .4s ease-out both; }
+
+/* Float */
+@keyframes float { 0% { transform: translateY(0px);} 50% { transform: translateY(-4px);} 100% { transform: translateY(0px);} }
+.float { animation: float 4s ease-in-out infinite; }
+
+/* Skeleton */
+.skeleton { position: relative; overflow: hidden; background: #2a2a2e; border-radius: .5rem; }
+.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+  animation: shimmer 1.2s infinite; }
+@keyframes shimmer { 100% { transform: translateX(100%);} }
+
+/* Glowing cursor (uses CSS vars set by JS) */
+body::before { content: ""; position: fixed; width: 220px; height: 220px; border-radius: 50%; pointer-events: none; background: radial-gradient( circle, rgba(0,180,255,.18), transparent 60% ); left: var(--mx); top: var(--my); transform: translate(-50%, -50%); z-index: 10; mix-blend-mode: screen; opacity: .6; }
+body { cursor: crosshair; }

@@ -1,0 +1,12 @@
+{
+  "name": "swasthsaathi-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm --prefix swasthsaathi-backend run dev\" \"npm --prefix swasthsaathi-frontend run dev\"",
+    "build": "npm --prefix swasthsaathi-backend run build && npm --prefix swasthsaathi-frontend run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
