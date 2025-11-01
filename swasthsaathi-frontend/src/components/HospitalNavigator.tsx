@@ -133,6 +133,7 @@ export const HospitalNavigator = () => {
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
               className="px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+              aria-label="Filter by hospital type"
             >
               <option value="">All Types</option>
               <option value="Government">Government</option>
@@ -149,6 +150,8 @@ export const HospitalNavigator = () => {
                 value={radius}
                 onChange={(e) => setRadius(Number(e.target.value))}
                 className="flex-1"
+                aria-label="Search radius in kilometers"
+                title={`Search radius: ${radius} km`}
               />
               <span className="text-sm font-medium">{radius}</span>
             </div>
@@ -174,10 +177,11 @@ export const HospitalNavigator = () => {
               center={userLocation}
               zoom={12}
               style={{ height: '100%', width: '100%' }}
+              scrollWheelZoom={false}
             >
               <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               />
               
               {/* User location marker */}

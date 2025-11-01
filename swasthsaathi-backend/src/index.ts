@@ -86,29 +86,40 @@ app.post('/api/auth/request-otp', async (req: Request, res: Response) => {
   if (!parsed.success) return res.status(400).json({ error: 'Invalid phone' });
   const { phone } = parsed.data;
   
-  // Check if Twilio is configured
+  // Check if Twilio is configured and mock is disabled
   const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
+  const mockOTP = process.env.MOCK_OTP !== 'false';
   
-  if (twilioConfigured) {
+  if (twilioConfigured && !mockOTP) {
     try {
-      const accountSid = process.env.TWILIO_ACCOUNT_SID!;
-      const authToken = process.env.TWILIO_AUTH_TOKEN!;
-      const from = process.env.TWILIO_FROM!;
+      const twilio = require('twilio');
+      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      
       // Generate random 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      // TODO: Integrate Twilio SDK when available
-      // const client = require('twilio')(accountSid, authToken);
-      // await client.messages.create({ body: `Your Swasth Saathi OTP is: ${otp}`, from, to: phone });
-      // Store OTP in memory/Redis for verification
-      console.log(`Twilio SMS would send OTP ${otp} to ${phone}`);
+      
+      // Store OTP in memory (in production use Redis with TTL)
+      const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
+      otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 }); // 5 min expiry
+      
+      // Send real SMS
+      await client.messages.create({
+        body: `Your Swasth Saathi OTP is: ${otp}. Valid for 5 minutes.`,
+        from: process.env.TWILIO_FROM,
+        to: phone
+      });
+      
+      console.log(`✅ Real OTP sent to ${phone}`);
       res.json({ success: true, message: 'OTP sent via SMS' });
-    } catch (error) {
-      console.error('Twilio error:', error);
-      // Fallback to mock
+    } catch (error: any) {
+      console.error('Twilio error:', error.message);
+      // Fallback to mock on error
       res.json({ success: true, code: '123456', message: 'Mock OTP (Twilio error)' });
     }
   } else {
     // Dev mode: fixed code
+    const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
+    otpStore.set(phone, { otp: '123456', expiresAt: Date.now() + 5 * 60 * 1000 });
     res.json({ success: true, code: '123456', message: 'Mock OTP (dev mode)' });
   }
 });
@@ -118,7 +129,26 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
   const parsed = OtpVerify.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
   const { phone, code } = parsed.data;
-  if (code !== '123456') return res.status(401).json({ error: 'Invalid code' });
+  
+  // Verify OTP from store
+  const otpStore = (global as any).otpStore || new Map();
+  const stored = otpStore.get(phone);
+  
+  if (!stored) {
+    return res.status(401).json({ error: 'OTP not found or expired. Please request a new one.' });
+  }
+  
+  if (Date.now() > stored.expiresAt) {
+    otpStore.delete(phone);
+    return res.status(401).json({ error: 'OTP expired. Please request a new one.' });
+  }
+  
+  if (code !== stored.otp) {
+    return res.status(401).json({ error: 'Invalid OTP code' });
+  }
+  
+  // Clear used OTP
+  otpStore.delete(phone);
   // Ensure user exists in database
   if (process.env.DATABASE_URL) {
     const prisma = getPrisma();
