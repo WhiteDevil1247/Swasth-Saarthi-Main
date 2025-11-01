@@ -48,33 +48,36 @@ app.use(express.json());
 // Basic rate limiting for API routes
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false }));
 
-// Health
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ ok: true, service: 'swasthsaathi-backend' });
-});
-
-// DB init (Mongo only for now)
+// DB init
 (async () => {
   try {
     if (process.env.MONGO_URI) {
       await connectMongo(process.env.MONGO_URI);
-      console.log('Mongo connected');
+      console.log('✅ MongoDB connected');
     }
     if (process.env.DATABASE_URL) {
       // Prefer Prisma for Postgres connectivity
       await testPrismaConnection();
-      console.log('Postgres (Prisma) connected');
+      console.log('✅ PostgreSQL (Prisma) connected');
     } else {
-      console.log('Postgres not configured (DATABASE_URL missing). Skipping PG init.');
+      console.log('⚠️  PostgreSQL not configured (DATABASE_URL missing)');
     }
   } catch (err) {
-    console.error('Database init error', err);
+    console.error('❌ Database init error:', err);
   }
 })();
 
-// Health
+// Health Check
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ ok: true, service: 'swasthsaathi-backend' });
+  res.json({ 
+    ok: true, 
+    service: 'swasth-saathi-backend',
+    timestamp: new Date().toISOString(),
+    databases: {
+      mongodb: !!process.env.MONGO_URI,
+      postgresql: !!process.env.DATABASE_URL
+    }
+  });
 });
 
 // Protected example
@@ -462,7 +465,7 @@ app.get('/api/ai/timeline', verifyJWT, async (req: Request, res: Response) => {
 });
 
 // --------- Postgres-backed resources (profiles, appointments, metrics) via Prisma
-const pg = process.env.DATABASE_URL ? getPgPool() : null as any; // retained for legacy scripts; Prisma used below
+// Note: All Postgres operations now use Prisma ORM exclusively
 
 // Profiles
 app.get('/api/profile', verifyJWT, async (req: Request, res: Response) => {

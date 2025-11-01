@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import type { LatLngExpression } from 'leaflet';
 import { Search, MapPin, Phone, Building2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import 'leaflet/dist/leaflet.css';
@@ -173,19 +174,21 @@ export const HospitalNavigator = () => {
             className="bg-white rounded-2xl shadow-xl overflow-hidden h-[500px]"
             variants={itemVariants}
           >
+            {/* @ts-ignore - react-leaflet v4 type definitions issue */}
             <MapContainer
-              center={userLocation}
+              center={userLocation as LatLngExpression}
               zoom={12}
               style={{ height: '100%', width: '100%' }}
               scrollWheelZoom={false}
             >
+              {/* @ts-ignore - react-leaflet v4 type definitions issue */}
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               />
               
               {/* User location marker */}
-              <Marker position={userLocation}>
+              <Marker position={userLocation as LatLngExpression}>
                 <Popup>
                   <div className="text-center">
                     <strong>Your Location</strong>
@@ -197,7 +200,7 @@ export const HospitalNavigator = () => {
               {hospitals.map((hospital) => {
                 if (hospital.lat && hospital.lng) {
                   return (
-                    <Marker key={hospital.id} position={[hospital.lat, hospital.lng]}>
+                    <Marker key={hospital.id} position={[hospital.lat, hospital.lng] as LatLngExpression}>
                       <Popup>
                         <div className="p-2">
                           <h3 className="font-bold">{hospital.name}</h3>
