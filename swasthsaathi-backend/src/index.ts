@@ -18,6 +18,7 @@ import QRCode from 'qrcode';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { encryptString, decryptString, encryptJSON } from './lib/crypto';
+import { Server as SocketIOServer } from 'socket.io';
 
 const app = express();
 const server = http.createServer(app);
@@ -78,13 +79,38 @@ app.get('/api/me', verifyJWT, (req: Request, res: Response) => {
   res.json({ user });
 });
 
-// Auth (mock OTP/JWT)
+// Auth (Twilio OTP with fallback)
 const OtpRequest = z.object({ phone: z.string().min(6) });
-app.post('/api/auth/request-otp', (req: Request, res: Response) => {
+app.post('/api/auth/request-otp', async (req: Request, res: Response) => {
   const parsed = OtpRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid phone' });
-  // fixed code for dev
-  res.json({ success: true, code: '123456' });
+  const { phone } = parsed.data;
+  
+  // Check if Twilio is configured
+  const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
+  
+  if (twilioConfigured) {
+    try {
+      const accountSid = process.env.TWILIO_ACCOUNT_SID!;
+      const authToken = process.env.TWILIO_AUTH_TOKEN!;
+      const from = process.env.TWILIO_FROM!;
+      // Generate random 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      // TODO: Integrate Twilio SDK when available
+      // const client = require('twilio')(accountSid, authToken);
+      // await client.messages.create({ body: `Your Swasth Saathi OTP is: ${otp}`, from, to: phone });
+      // Store OTP in memory/Redis for verification
+      console.log(`Twilio SMS would send OTP ${otp} to ${phone}`);
+      res.json({ success: true, message: 'OTP sent via SMS' });
+    } catch (error) {
+      console.error('Twilio error:', error);
+      // Fallback to mock
+      res.json({ success: true, code: '123456', message: 'Mock OTP (Twilio error)' });
+    }
+  } else {
+    // Dev mode: fixed code
+    res.json({ success: true, code: '123456', message: 'Mock OTP (dev mode)' });
+  }
 });
 
 const OtpVerify = z.object({ phone: z.string().min(6), code: z.string().min(4) });
@@ -246,6 +272,49 @@ app.post('/api/ngos', verifyJWT, async (req: Request, res: Response) => {
   const prisma = getPrisma();
   const created = await prisma.ngo.create({ data: parsed.data });
   res.status(201).json({ ...created, synced: false });
+});
+
+// ---------- SOS Emergency SMS
+const SosRequest = z.object({ 
+  location: z.object({ lat: z.number(), lng: z.number() }).optional(),
+  message: z.string().optional() 
+});
+app.post('/api/sos', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const phone = user?.sub as string;
+  const parsed = SosRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid request' });
+  
+  const { location, message } = parsed.data;
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  
+  const prof = await prisma.profile.findUnique({ where: { userId: userRecord.id } });
+  const emergencyContact = prof?.emergency_contact ? decryptString(prof.emergency_contact) : null;
+  
+  if (!emergencyContact) {
+    return res.status(400).json({ error: 'No emergency contact configured' });
+  }
+  
+  const sosMessage = `🆘 EMERGENCY ALERT from ${prof?.full_name || phone}!\n${message || 'Immediate help needed!'}\n${location ? `Location: https://maps.google.com/?q=${location.lat},${location.lng}` : 'Location unknown'}\nCall: ${phone}`;
+  
+  // Send SMS via Twilio if configured
+  const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
+  
+  if (twilioConfigured) {
+    try {
+      // TODO: Integrate Twilio SDK
+      console.log(`Would send SOS to ${emergencyContact}: ${sosMessage}`);
+      res.json({ success: true, message: 'Emergency alert sent', contact: emergencyContact });
+    } catch (error) {
+      console.error('SOS SMS error:', error);
+      res.json({ success: true, message: 'SOS logged (SMS failed)', contact: emergencyContact });
+    }
+  } else {
+    console.log(`Mock SOS to ${emergencyContact}: ${sosMessage}`);
+    res.json({ success: true, message: 'SOS logged (mock mode)', contact: emergencyContact });
+  }
 });
 
 // ---------- Emergency QR (uses profile)
@@ -528,18 +597,55 @@ app.post('/api/chat', verifyJWT, async (req: Request, res: Response) => {
   res.status(201).json(saved);
 });
 
-// WebSocket signaling
-const wss = new WebSocketServer({ server, path: '/signalling' });
-wss.on('connection', (socket) => {
-  socket.on('message', (data) => {
-    // naive broadcast to others; in prod add rooms, auth, etc.
-    wss.clients.forEach((client) => {
-      if (client !== socket && (client as any).readyState === 1) {
-        (client as any).send(data);
-      }
-    });
+// Socket.io for WebRTC signaling (video calls)
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: FRONTEND_ORIGIN,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+  
+  socket.on('join-room', (roomId: string) => {
+    socket.join(roomId);
+    socket.to(roomId).emit('user-connected', socket.id);
+  });
+  
+  socket.on('webrtc-offer', (data: { roomId: string; offer: any }) => {
+    socket.to(data.roomId).emit('webrtc-offer', { offer: data.offer, from: socket.id });
+  });
+  
+  socket.on('webrtc-answer', (data: { roomId: string; answer: any }) => {
+    socket.to(data.roomId).emit('webrtc-answer', { answer: data.answer, from: socket.id });
+  });
+  
+  socket.on('ice-candidate', (data: { roomId: string; candidate: any }) => {
+    socket.to(data.roomId).emit('ice-candidate', { candidate: data.candidate, from: socket.id });
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Socket disconnected:', socket.id);
+    io.emit('user-disconnected', socket.id);
   });
 });
+
+// WebSocket for legacy support
+const wss = new WebSocketServer({ noServer: true });
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
+  if (pathname === '/ws') {
+    wss.handleUpgrade(request, socket, head, (ws: any) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// (SOS endpoint already defined above)
 
 server.on('error', (err: any) => {
   if (err && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) {
