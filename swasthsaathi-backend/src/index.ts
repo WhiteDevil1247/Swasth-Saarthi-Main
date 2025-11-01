@@ -10,6 +10,7 @@ import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { connectMongo } from './db/mongo';
 import { getPgPool, testPgConnection, initPgSchema } from './db/pg';
+import { getPrisma, testPrismaConnection } from './db/prisma';
 import { verifyJWT, AuthRequest } from './middleware/auth';
 import { HealthRecord } from './models/HealthRecord';
 import { ChatLog } from './models/ChatLog';
@@ -54,12 +55,9 @@ app.get('/api/health', (_req: Request, res: Response) => {
       console.log('Mongo connected');
     }
     if (process.env.DATABASE_URL) {
-      // initialize Postgres if configured
-      getPgPool();
-      await testPgConnection();
-      console.log('Postgres connected');
-      await initPgSchema();
-      console.log('Postgres schema ensured');
+      // Prefer Prisma for Postgres connectivity
+      await testPrismaConnection();
+      console.log('Postgres (Prisma) connected');
     } else {
       console.log('Postgres not configured (DATABASE_URL missing). Skipping PG init.');
     }
@@ -158,7 +156,7 @@ app.delete('/api/records/:id', verifyJWT, async (req: Request, res: Response) =>
   res.status(204).send();
 });
 
-// ---------- Hospitals (Postgres)
+// ---------- Hospitals (Postgres via Prisma)
 const HospitalsQuery = z.object({
   search: z.string().optional(),
   city: z.string().optional(),
@@ -169,22 +167,27 @@ const HospitalsQuery = z.object({
   radiusKm: z.coerce.number().min(0.1).max(100).optional(),
 });
 app.get('/api/hospitals', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const q = HospitalsQuery.safeParse(req.query);
   if (!q.success) return res.status(400).json({ error: 'Invalid query' });
   const { search, city, type, limit, lat, lng, radiusKm } = q.data;
-  const params: any[] = [];
-  const where: string[] = [];
-  if (search) { params.push(`%${search}%`); where.push('(name ILIKE $' + params.length + ' OR address ILIKE $' + params.length + ')'); }
-  if (city) { params.push(city); where.push('city ILIKE $' + params.length); }
-  if (type) { params.push(type); where.push('type ILIKE $' + params.length); }
-  let baseSql = `SELECT id, name, address, city, state, phone as contact, type, beds, latitude as lat, longitude as lng FROM hospitals`;
-  if (where.length) baseSql += ' WHERE ' + where.join(' AND ');
+  const prisma = getPrisma();
   const lim = Math.min(limit ?? 50, 200);
-  baseSql += ` ORDER BY created_at DESC LIMIT ${lim}`;
-  const { rows } = await pg.query(baseSql, params);
+  const items = await prisma.hospital.findMany({
+    where: {
+      AND: [
+        search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { address: { contains: search, mode: 'insensitive' } }] } : {},
+        city ? { city: { contains: city, mode: 'insensitive' } } : {},
+        type ? { type: { contains: type, mode: 'insensitive' } } : {},
+      ],
+    },
+    orderBy: { created_at: 'desc' },
+    take: lim,
+    select: { id: true, name: true, address: true, city: true, state: true, phone: true, type: true, beds: true, latitude: true, longitude: true },
+  });
+  const rows = items.map((r: any) => ({ id: r.id, name: r.name, address: r.address, city: r.city, state: r.state, contact: r.phone, type: r.type, beds: r.beds, lat: r.latitude, lng: r.longitude }));
   if (lat != null && lng != null && radiusKm != null) {
-    const R = 6371; // km
+    const R = 6371;
     const withDist = rows
       .filter((r: any) => r.lat != null && r.lng != null)
       .map((r: any) => {
@@ -202,55 +205,55 @@ app.get('/api/hospitals', verifyJWT, async (req: Request, res: Response) => {
 });
 
 app.get('/api/hospitals/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rows } = await pg.query('SELECT id, name, address, city, state, phone as contact, type, beds, latitude as lat, longitude as lng FROM hospitals WHERE id=$1', [id]);
-  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...rows[0], synced: false });
+  const prisma = getPrisma();
+  const h = await prisma.hospital.findUnique({ where: { id } });
+  if (!h) return res.status(404).json({ error: 'Not found' });
+  res.json({ id: h.id, name: h.name, address: h.address, city: h.city, state: h.state, contact: h.phone, type: h.type, beds: h.beds, lat: h.latitude, lng: h.longitude, synced: false });
 });
 
-// ---------- NGOs (Postgres)
+// ---------- NGOs (Postgres via Prisma)
 app.get('/api/ngos', verifyJWT, async (_req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
-  const { rows } = await pg.query('SELECT id, name, description, contact, website, city, tags, created_at FROM ngos ORDER BY created_at DESC LIMIT 200');
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
+  const prisma = getPrisma();
+  const rows = await prisma.ngo.findMany({ orderBy: { created_at: 'desc' }, take: 200 });
   res.json(rows);
 });
 
 app.get('/api/ngos/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rows } = await pg.query('SELECT id, name, description, contact, website, city, tags, created_at FROM ngos WHERE id=$1', [id]);
-  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  res.json(rows[0]);
+  const prisma = getPrisma();
+  const ngo = await prisma.ngo.findUnique({ where: { id } });
+  if (!ngo) return res.status(404).json({ error: 'Not found' });
+  res.json(ngo);
 });
 
 const NgoCreate = z.object({ name: z.string().min(1), description: z.string().optional(), contact: z.string().optional(), website: z.string().optional(), city: z.string().optional(), tags: z.string().optional() });
 app.post('/api/ngos', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const parsed = NgoCreate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
-  const { name, description, contact, website, city, tags } = parsed.data;
-  const { rows } = await pg.query(
-    `INSERT INTO ngos (name, description, contact, website, city, tags) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [name, description ?? null, contact ?? null, website ?? null, city ?? null, tags ?? null]
-  );
-  res.status(201).json({ ...rows[0], synced: false });
+  const prisma = getPrisma();
+  const created = await prisma.ngo.create({ data: parsed.data });
+  res.status(201).json({ ...created, synced: false });
 });
 
 // ---------- Emergency QR (uses profile)
 app.get('/api/qr/emergency', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
-  const { rows } = await pg.query('SELECT full_name, blood_group, emergency_contact FROM profiles WHERE user_id=$1', [userId]);
-  const prof = rows[0] || {};
+  const prisma = getPrisma();
+  const prof = await prisma.profile.findUnique({ where: { userId }, select: { full_name: true, blood_group: true, emergency_contact: true } });
   const payload = {
     id: userId,
-    name: prof.full_name || 'Unknown',
-    blood_group: prof.blood_group || 'NA',
-    emergency_contact: prof.emergency_contact || 'NA',
+    name: prof?.full_name || 'Unknown',
+    blood_group: prof?.blood_group || 'NA',
+    emergency_contact: prof?.emergency_contact || 'NA',
     profile_url: `${FRONTEND_ORIGIN}/settings`,
   };
   const qrDataUrl = await QRCode.toDataURL(JSON.stringify(payload));
@@ -286,32 +289,31 @@ app.get('/api/ai/timeline', verifyJWT, async (req: Request, res: Response) => {
   res.json({ summary, metrics: rows });
 });
 
-// --------- Postgres-backed resources (profiles, appointments, metrics)
-const pg = process.env.DATABASE_URL ? getPgPool() : null as any;
+// --------- Postgres-backed resources (profiles, appointments, metrics) via Prisma
+const pg = process.env.DATABASE_URL ? getPgPool() : null as any; // retained for legacy scripts; Prisma used below
 
 // Profiles
 app.get('/api/profile', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
-  const { rows } = await pg.query('SELECT * FROM profiles WHERE user_id=$1', [userId]);
-  if (rows.length === 0) return res.json(null);
-  res.json(rows[0]);
+  const prisma = getPrisma();
+  const prof = await prisma.profile.findUnique({ where: { userId } });
+  res.json(prof ?? null);
 });
 
 app.put('/api/profile', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
   const { full_name, email, phone } = req.body || {};
-  await pg.query(
-    `INSERT INTO profiles (user_id, full_name, email, phone, updated_at)
-     VALUES ($1,$2,$3,$4,NOW())
-     ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, email=EXCLUDED.email, phone=EXCLUDED.phone, updated_at=NOW()`,
-    [userId, full_name ?? null, email ?? null, phone ?? null]
-  );
-  const { rows } = await pg.query('SELECT * FROM profiles WHERE user_id=$1', [userId]);
-  res.json(rows[0] ?? null);
+  const prisma = getPrisma();
+  const prof = await prisma.profile.upsert({
+    where: { userId },
+    update: { full_name, email, phone, updated_at: new Date() },
+    create: { userId, full_name, email, phone },
+  });
+  res.json(prof);
 });
 
 // Appointments
@@ -331,103 +333,90 @@ const AppointmentUpdate = z.object({
   status: z.enum(['scheduled','completed','cancelled']).optional(),
 });
 app.get('/api/appointments', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
-  const { rows } = await pg.query('SELECT * FROM appointments WHERE user_id=$1 ORDER BY start_time DESC NULLS LAST', [userId]);
+  const prisma = getPrisma();
+  const rows = await prisma.appointment.findMany({ where: { userId }, orderBy: { start_time: 'desc' } });
   const withSync = rows.map((r: any) => ({ ...r, synced: false }));
   res.json(withSync);
 });
 
 app.post('/api/appointments', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
   const parsed = AppointmentCreate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
-  const { provider, reason, start_time, end_time, status } = parsed.data;
-  const { rows } = await pg.query(
-    `INSERT INTO appointments (user_id, provider, reason, start_time, end_time, status)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [userId, provider ?? null, reason ?? null, start_time ?? null, end_time ?? null, status ?? 'scheduled']
-  );
-  res.status(201).json(rows[0]);
+  const prisma = getPrisma();
+  const created = await prisma.appointment.create({ data: { userId, ...parsed.data } });
+  res.status(201).json(created);
 });
 
 app.patch('/api/appointments/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = AppointmentUpdate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
-  const fields = parsed.data;
-  const setParts: string[] = [];
-  const values: any[] = [];
-  let idx = 1;
-  for (const [k, v] of Object.entries(fields)) {
-    setParts.push(`${k}=$${idx++}`);
-    values.push(v);
-  }
-  if (setParts.length === 0) return res.status(400).json({ error: 'No fields to update' });
-  values.push(userId);
-  values.push(id);
-  const sql = `UPDATE appointments SET ${setParts.join(', ')}, updated_at=NOW() WHERE user_id=$${idx++} AND id=$${idx} RETURNING *`;
-  const { rows } = await pg.query(sql, values);
-  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  res.json(rows[0]);
+  const prisma = getPrisma();
+  const { count } = await prisma.appointment.updateMany({ where: { id, userId }, data: parsed.data });
+  if (count === 0) return res.status(404).json({ error: 'Not found' });
+  const updated = await prisma.appointment.findUnique({ where: { id } });
+  return res.json(updated);
 });
 
 app.delete('/api/appointments/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rowCount } = await pg.query('DELETE FROM appointments WHERE user_id=$1 AND id=$2', [userId, id]);
-  if (rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  const prisma = getPrisma();
+  const { count } = await prisma.appointment.deleteMany({ where: { id, userId } });
+  if (count === 0) return res.status(404).json({ error: 'Not found' });
   res.status(204).send();
 });
 
 // Metrics with optional filters
 const MetricsQuery = z.object({ type: z.string().optional(), limit: z.coerce.number().min(1).max(200).optional() });
 app.get('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
   const parsed = MetricsQuery.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid query' });
   const { type, limit } = parsed.data;
-  const where = ['user_id=$1'];
-  const params: any[] = [userId];
-  if (type) { where.push('type=$2'); params.push(type); }
-  const lim = Math.min(limit ?? 50, 200);
-  const sql = `SELECT * FROM metrics WHERE ${where.join(' AND ')} ORDER BY recorded_at DESC LIMIT ${lim}`;
-  const { rows } = await pg.query(sql, params);
+  const prisma = getPrisma();
+  const rows = await prisma.metric.findMany({
+    where: { userId, ...(type ? { type } : {}) },
+    orderBy: { recorded_at: 'desc' },
+    take: Math.min(limit ?? 50, 200),
+  });
   res.json(rows);
 });
 
 app.post('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
   const { type, value } = req.body || {};
-  const { rows } = await pg.query(
-    `INSERT INTO metrics (user_id, type, value) VALUES ($1,$2,$3) RETURNING *`,
-    [userId, type, value]
-  );
-  res.status(201).json(rows[0]);
+  const prisma = getPrisma();
+  const created = await prisma.metric.create({ data: { userId, type, value } });
+  res.status(201).json(created);
 });
 
 app.delete('/api/metrics/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rowCount } = await pg.query('DELETE FROM metrics WHERE user_id=$1 AND id=$2', [userId, id]);
-  if (rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  const prisma = getPrisma();
+  const { count } = await prisma.metric.deleteMany({ where: { id, userId } });
+  if (count === 0) return res.status(404).json({ error: 'Not found' });
   res.status(204).send();
 });
 

@@ -1,7 +1,7 @@
 version: '3.9'
 services:
   postgres:
-    image: postgres:13-alpine
+    image: postgres:15-alpine
     environment:
       POSTGRES_USER: pguser
       POSTGRES_PASSWORD: pgpass
@@ -12,43 +12,31 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   mongo:
-    image: mongo:5
+    image: mongo:6
     ports:
       - "27017:27017"
     volumes:
       - mongodata:/data/db
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   backend:
-    build: ./backend
+    build: ./swasthsaathi-backend
     env_file:
-      - ./.env.local
+      - ./swasthsaathi-backend/.env
     ports:
-      - "8000:8000"
+      - "8081:8081"
     depends_on:
       - postgres
       - mongo
-      - redis
     volumes:
-      - ./backend:/app
+      - ./swasthsaathi-backend:/app
       - ./storage:/app/storage
 
   frontend:
-    image: node:18-alpine
-    working_dir: /app
-    env_file:
-      - ./.env.local
+    build: ./swasthsaathi-frontend
     ports:
-      - "3000:3000"
+      - "5173:80"
     depends_on:
       - backend
-    volumes:
-      - ./:/app
-    command: sh -c "npm ci || npm install && npm run dev"
 
 volumes:
   pgdata:

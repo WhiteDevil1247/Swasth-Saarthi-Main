@@ -7,11 +7,14 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
     "migrate": "node scripts/migrate.cjs",
     "seed": "node scripts/seed.cjs",
     "import:hospitals": "ts-node --transpile-only scripts/import_hospitals.ts"
   },
   "dependencies": {
+    "@prisma/client": "^5.19.1",
     "cors": "^2.8.5",
     "csv-parse": "^5.5.6",
     "dotenv": "^16.4.5",
@@ -29,6 +32,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "prisma": "^5.19.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/express-rate-limit": "^6.0.0",
