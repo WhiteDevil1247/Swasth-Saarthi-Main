@@ -17,6 +17,7 @@ import { ChatLog } from './models/ChatLog';
 import QRCode from 'qrcode';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import compression from 'compression';
 import { encryptString, decryptString, encryptJSON } from './lib/crypto';
 import { Server as SocketIOServer } from 'socket.io';
 
@@ -25,6 +26,9 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8081;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+
+// Compression for production
+app.use(compression());
 
 // Logging & metrics
 app.use(morgan('dev'));
@@ -368,33 +372,93 @@ app.get('/api/qr/emergency', verifyJWT, async (req: Request, res: Response) => {
   res.json({ qrDataUrl });
 });
 
-// AI Mock
-const AiRequest = z.object({ input: z.string().min(1) });
-app.post('/api/ai/infer', verifyJWT, (req: Request, res: Response) => {
-  const parsed = AiRequest.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid input' });
-  const { input } = parsed.data;
-  res.json({ result: `Mock analysis for: ${input}`, confidence: 0.87 });
+// AI Health Analysis (Proxy to Python Flask Service)
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:5001';
+
+// AI Report Analysis - proxies to Python ML service
+app.post('/api/ai/report', verifyJWT, async (req: Request, res: Response) => {
+  try {
+    const { bp, cholesterol, glucose } = req.body;
+    const response = await fetch(`${AI_SERVICE_URL}/api/ai/analyze-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bp, cholesterol, glucose })
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('AI Service error:', error.message);
+    res.status(503).json({ error: 'AI service unavailable', message: error.message });
+  }
 });
 
-// AI Timeline (mock heuristic)
+// AI Chat - proxies to Python NLP service
+app.post('/api/ai/chat', verifyJWT, async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    const response = await fetch(`${AI_SERVICE_URL}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('AI Service error:', error.message);
+    res.status(503).json({ error: 'AI service unavailable', message: error.message });
+  }
+});
+
+// Legacy AI inference endpoint (kept for backward compatibility)
+const AiRequest = z.object({ input: z.string().min(1) });
+app.post('/api/ai/infer', verifyJWT, async (req: Request, res: Response) => {
+  try {
+    const parsed = AiRequest.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid input' });
+    const { input } = parsed.data;
+    // Proxy to AI chat
+    const response = await fetch(`${AI_SERVICE_URL}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: input })
+    });
+    const data = await response.json();
+    res.json({ result: data.response || 'No response', confidence: data.confidence || 0.8 });
+  } catch (error) {
+    res.json({ result: `Analysis for: ${req.body.input}`, confidence: 0.75 });
+  }
+});
+
+// AI Timeline (health metrics summary)
 app.get('/api/ai/timeline', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
-  const { rows } = await pg.query(
-    `SELECT type, value, recorded_at FROM metrics WHERE user_id=$1 ORDER BY recorded_at DESC LIMIT 100`,
-    [userId]
-  );
-  if (rows.length === 0) return res.json({ summary: 'No recent health metrics recorded.', metrics: [] });
-  const latestByType: Record<string, any> = {};
-  for (const m of rows) if (!latestByType[m.type]) latestByType[m.type] = m;
-  const parts: string[] = [];
-  if (latestByType['bp']) parts.push(`BP latest: ${latestByType['bp'].value}`);
-  if (latestByType['hr']) parts.push(`Heart rate latest: ${latestByType['hr'].value}`);
-  if (latestByType['glucose']) parts.push(`Glucose latest: ${latestByType['glucose'].value}`);
-  const summary = parts.length ? parts.join('. ') : 'Health metrics captured recently.';
-  res.json({ summary, metrics: rows });
+  const phone = user?.sub as string;
+  try {
+    const prisma = getPrisma();
+    const userRecord = await prisma.user.findUnique({ where: { phone } });
+    if (!userRecord) return res.json({ summary: 'No user found', metrics: [] });
+    
+    const metrics = await prisma.metric.findMany({
+      where: { userId: userRecord.id },
+      orderBy: { recorded_at: 'desc' },
+      take: 100
+    });
+    
+    if (metrics.length === 0) return res.json({ summary: 'No recent health metrics recorded.', metrics: [] });
+    
+    const latestByType: Record<string, any> = {};
+    for (const m of metrics) if (!latestByType[m.type]) latestByType[m.type] = m;
+    
+    const parts: string[] = [];
+    if (latestByType['bp']) parts.push(`BP latest: ${latestByType['bp'].value}`);
+    if (latestByType['hr']) parts.push(`Heart rate latest: ${latestByType['hr'].value}`);
+    if (latestByType['glucose']) parts.push(`Glucose latest: ${latestByType['glucose'].value}`);
+    const summary = parts.length ? parts.join('. ') : 'Health metrics captured recently.';
+    res.json({ summary, metrics });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch metrics' });
+  }
 });
 
 // --------- Postgres-backed resources (profiles, appointments, metrics) via Prisma
@@ -563,7 +627,9 @@ app.post('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
   const prisma = getPrisma();
   const userRecord = await prisma.user.findUnique({ where: { phone } });
   if (!userRecord) return res.status(404).json({ error: 'User not found' });
-  const created = await prisma.metric.create({ data: { userId: userRecord.id, type, value } });
+  // Convert value to number if it's a string
+  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  const created = await prisma.metric.create({ data: { userId: userRecord.id, type, value: numericValue } });
   res.status(201).json(created);
 });
 
