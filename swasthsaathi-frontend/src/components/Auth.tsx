@@ -161,11 +161,16 @@ export default function Auth() {
         // User doesn't exist, redirect to sign up
         toast({ 
           title: "Account Not Found", 
-          description: "Please sign up to create an account", 
+          description: "Please go to Sign Up to create an account", 
           variant: "destructive" 
         });
-        setMode("signup");
-        setStep("profile");
+        // Reset state and switch to Sign Up tab
+        setTimeout(() => {
+          setMode("signup");
+          setStep("phone");
+          setPhone("");
+          setOtp("");
+        }, 2000);
       }
     } catch (error: any) {
       // If it's a Sign In attempt and user not found, suggest Sign Up
