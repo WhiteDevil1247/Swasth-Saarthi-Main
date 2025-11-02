@@ -7,6 +7,8 @@
     "build": "npm --prefix swasthsaathi-backend run build && npm --prefix swasthsaathi-frontend run build"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "vite": "^7.1.12"
   }
 }
