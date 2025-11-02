@@ -8,6 +8,7 @@ import FileUpload from "@/components/FileUpload";
 import HealthScore from "@/components/HealthScore";
 import HealthTimeline from "@/components/HealthTimeline";
 import QREmergencyCard from "@/components/QREmergencyCard";
+import { HealthRecordQR } from "@/components/HealthRecordQR";
 import { useHealthRecords, useHealthMetrics } from "@/hooks/useHealthData";
 import { cn } from "@/lib/utils";
 import {
@@ -160,16 +161,26 @@ export default function HealthVault() {
                           </div>
                         </div>
                       </div>
-                      {record.file_url && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="flex-shrink-0"
-                          onClick={() => window.open(record.file_url!, "_blank")}
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <HealthRecordQR
+                          recordId={record.id}
+                          title={record.title}
+                          qrCode={(record as any).qr_code}
+                          onQRGenerated={() => {
+                            // Optionally refetch records to get updated QR
+                          }}
+                        />
+                        {record.file_url && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="flex-shrink-0"
+                            onClick={() => window.open(record.file_url!, "_blank")}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </Card>
                 ))}

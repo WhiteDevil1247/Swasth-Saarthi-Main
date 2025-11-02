@@ -13,6 +13,8 @@ import {
   X,
   LogOut,
   Accessibility,
+  UserCircle,
+  Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +35,8 @@ const navItems = [
   { icon: Hospital, label: "Hospital Navigator", path: "/hospital-navigator" },
   { icon: Video, label: "Teleconsultation", path: "/teleconsultation" },
   { icon: Users, label: "NGO Hub", path: "/ngo-hub" },
+  { icon: Accessibility, label: "Accessibility Hub", path: "/accessibility" },
+  { icon: UserCircle, label: "Profile", path: "/profile" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
@@ -42,17 +46,21 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      navigate("/");
-      toast({
-        title: "Logged out successfully",
-        description: "See you soon!",
-      });
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+  const handleLogout = () => {
+    // Clear all auth data
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("user_profile_complete");
+    
+    toast({
+      title: "Logged out successfully",
+      description: "See you soon!",
+    });
+    
+    // Navigate to home, which will show Auth via ProtectedRoute
+    navigate("/");
+    
+    // Force page reload to trigger auth check
+    setTimeout(() => window.location.reload(), 500);
   };
 
   return (
@@ -68,17 +76,30 @@ export function Layout({ children }: LayoutProps) {
         {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
       </Button>
 
-      {/* Prominent Accessibility Button - Top Right */}
-      <Link to="/accessibility" className="fixed top-4 right-4 z-50">
-        <Button 
-          size="lg" 
-          className="bg-gradient-primary text-white shadow-glow hover:scale-105 transition-all animate-pulse-glow"
-        >
-          <Accessibility className="w-5 h-5 mr-2" />
-          <span className="hidden sm:inline">Accessibility Hub</span>
-          <Badge className="ml-2 bg-white/20 hover:bg-white/20 hidden sm:inline-flex">NEW</Badge>
-        </Button>
-      </Link>
+      {/* Top Right Icons */}
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-3">
+        {/* Premium Icon */}
+        <Link to="/pricing">
+          <Button
+            size="icon"
+            className="w-12 h-12 rounded-full bg-gradient-to-br from-yellow-500 to-amber-600 shadow-lg hover:shadow-glow hover:scale-110 transition-all animate-pulse-glow"
+            aria-label="Upgrade to Premium"
+          >
+            <Crown className="h-6 w-6 text-white" />
+          </Button>
+        </Link>
+
+        {/* Profile Icon */}
+        <Link to="/profile">
+          <Button
+            size="icon"
+            className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent shadow-lg hover:shadow-glow hover:scale-110 transition-all"
+            aria-label="Go to Profile"
+          >
+            <UserCircle className="h-6 w-6 text-white" />
+          </Button>
+        </Link>
+      </div>
 
       {/* Sidebar */}
       <aside
@@ -90,11 +111,14 @@ export function Layout({ children }: LayoutProps) {
       >
         <div className="flex flex-col h-full p-4">
           {/* Logo */}
-          <div className="flex items-center gap-3 mb-8 px-2 pt-4">
-            <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center">
-              <Heart className="w-6 h-6 text-sidebar-primary-foreground" />
-            </div>
-            <h1 className="text-xl font-bold text-sidebar-foreground">HealthSaathi</h1>
+          <div className="flex items-center justify-center mb-8 px-2 pt-4">
+            <Link to="/" className="relative" onClick={() => setSidebarOpen(false)}>
+              <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift px-4 py-3 rounded-xl bg-gradient-primary/10 shadow-lg backdrop-blur-sm border border-primary/20 hover:scale-105 hover:shadow-glow transition-all cursor-pointer">
+                Swasth Saathi
+              </h1>
+              {/* Glow effect */}
+              <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/20 via-accent/20 to-secondary/20 blur-xl rounded-xl animate-pulse"></div>
+            </Link>
           </div>
 
           {/* Navigation */}

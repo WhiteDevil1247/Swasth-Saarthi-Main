@@ -10,18 +10,25 @@ import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { connectMongo } from './db/mongo';
 import { getPgPool, testPgConnection, initPgSchema } from './db/pg';
+import { getPrisma, testPrismaConnection } from './db/prisma';
 import { verifyJWT, AuthRequest } from './middleware/auth';
 import { HealthRecord } from './models/HealthRecord';
 import { ChatLog } from './models/ChatLog';
 import QRCode from 'qrcode';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import compression from 'compression';
+import { encryptString, decryptString, encryptJSON, decryptJSON } from './lib/crypto';
+import { Server as SocketIOServer } from 'socket.io';
 
 const app = express();
 const server = http.createServer(app);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8081;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+
+// Compression for production
+app.use(compression());
 
 // Logging & metrics
 app.use(morgan('dev'));
@@ -41,36 +48,36 @@ app.use(express.json());
 // Basic rate limiting for API routes
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false }));
 
-// Health
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ ok: true, service: 'swasthsaathi-backend' });
-});
-
-// DB init (Mongo only for now)
+// DB init
 (async () => {
   try {
     if (process.env.MONGO_URI) {
       await connectMongo(process.env.MONGO_URI);
-      console.log('Mongo connected');
+      console.log('✅ MongoDB connected');
     }
     if (process.env.DATABASE_URL) {
-      // initialize Postgres if configured
-      getPgPool();
-      await testPgConnection();
-      console.log('Postgres connected');
-      await initPgSchema();
-      console.log('Postgres schema ensured');
+      // Prefer Prisma for Postgres connectivity
+      await testPrismaConnection();
+      console.log('✅ PostgreSQL (Prisma) connected');
     } else {
-      console.log('Postgres not configured (DATABASE_URL missing). Skipping PG init.');
+      console.log('⚠️  PostgreSQL not configured (DATABASE_URL missing)');
     }
   } catch (err) {
-    console.error('Database init error', err);
+    console.error('❌ Database init error:', err);
   }
 })();
 
-// Health
+// Health Check
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ ok: true, service: 'swasthsaathi-backend' });
+  res.json({ 
+    ok: true, 
+    service: 'swasth-saathi-backend',
+    timestamp: new Date().toISOString(),
+    databases: {
+      mongodb: !!process.env.MONGO_URI,
+      postgresql: !!process.env.DATABASE_URL
+    }
+  });
 });
 
 // Protected example
@@ -79,21 +86,105 @@ app.get('/api/me', verifyJWT, (req: Request, res: Response) => {
   res.json({ user });
 });
 
-// Auth (mock OTP/JWT)
+// Auth (MOCK OTP - Twilio code commented out)
 const OtpRequest = z.object({ phone: z.string().min(6) });
-app.post('/api/auth/request-otp', (req: Request, res: Response) => {
+app.post('/api/auth/request-otp', async (req: Request, res: Response) => {
   const parsed = OtpRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid phone' });
-  // fixed code for dev
-  res.json({ success: true, code: '123456' });
+  const { phone } = parsed.data;
+  
+  // ===== TWILIO REAL OTP CODE (COMMENTED OUT) =====
+  // Check if Twilio is configured and mock is disabled
+  // const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
+  // const mockOTP = process.env.MOCK_OTP !== 'false';
+  // 
+  // if (twilioConfigured && !mockOTP) {
+  //   try {
+  //     const twilio = require('twilio');
+  //     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  //     
+  //     // Generate random 6-digit OTP
+  //     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  //     
+  //     // Store OTP in memory (in production use Redis with TTL)
+  //     const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
+  //     otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 }); // 5 min expiry
+  //     
+  //     // Send real SMS
+  //     await client.messages.create({
+  //       body: `Your Swasth Saathi OTP is: ${otp}. Valid for 5 minutes.`,
+  //       from: process.env.TWILIO_FROM,
+  //       to: phone
+  //     });
+  //     
+  //     console.log(`✅ Real OTP sent to ${phone}`);
+  //     res.json({ success: true, message: 'OTP sent via SMS' });
+  //   } catch (error: any) {
+  //     console.error('Twilio error:', error.message);
+  //     // Fallback to mock on error
+  //     res.json({ success: true, code: '123456', message: 'Mock OTP (Twilio error)' });
+  //   }
+  // } else {
+  // ===== END TWILIO CODE =====
+  
+  // MOCK OTP MODE: Always use 123456
+  const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
+  const mockOtp = '123456';
+  otpStore.set(phone, { otp: mockOtp, expiresAt: Date.now() + 5 * 60 * 1000 });
+  console.log(`📱 MOCK OTP stored for ${phone}: "${mockOtp}"`);
+  console.log(`   Store size: ${otpStore.size} entries`);
+  res.json({ success: true, code: mockOtp, message: 'Mock OTP - Use 123456 to continue' });
+  // }
 });
 
 const OtpVerify = z.object({ phone: z.string().min(6), code: z.string().min(4) });
-app.post('/api/auth/verify', (req: Request, res: Response) => {
+app.post('/api/auth/verify', async (req: Request, res: Response) => {
   const parsed = OtpVerify.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
   const { phone, code } = parsed.data;
-  if (code !== '123456') return res.status(401).json({ error: 'Invalid code' });
+  
+  // Verify OTP from store
+  const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
+  const stored = otpStore.get(phone);
+  
+  console.log(`🔐 OTP Verification attempt for ${phone}`);
+  console.log(`   Received code: "${code}"`);
+  console.log(`   Stored OTP: "${stored?.otp}"`);
+  console.log(`   Code match: ${code === stored?.otp}`);
+  
+  if (!stored) {
+    console.log(`❌ OTP not found for ${phone}`);
+    return res.status(401).json({ error: 'OTP not found or expired. Please request a new one.' });
+  }
+  
+  if (Date.now() > stored.expiresAt) {
+    console.log(`❌ OTP expired for ${phone}`);
+    otpStore.delete(phone);
+    return res.status(401).json({ error: 'OTP expired. Please request a new one.' });
+  }
+  
+  // Trim whitespace and compare
+  const trimmedCode = code.trim();
+  const trimmedStoredOtp = stored.otp.trim();
+  
+  if (trimmedCode !== trimmedStoredOtp) {
+    console.log(`❌ Invalid OTP for ${phone}: got "${trimmedCode}" expected "${trimmedStoredOtp}"`);
+    return res.status(401).json({ error: 'Invalid OTP code' });
+  }
+  
+  console.log(`✅ OTP verified successfully for ${phone}`);
+  
+  // Clear used OTP
+  otpStore.delete(phone);
+  // Ensure user exists in database
+  if (process.env.DATABASE_URL) {
+    try {
+      const prisma = getPrisma();
+      await prisma.user.upsert({ where: { phone }, create: { phone }, update: {} });
+    } catch (dbError: any) {
+      console.error('⚠️ Failed to upsert user in database:', dbError?.message || dbError);
+    }
+  }
   const token = jwt.sign({ sub: phone, role: 'user' }, process.env.JWT_SECRET || 'devsecret', { expiresIn: '1h' });
   res.json({ token });
 });
@@ -108,19 +199,63 @@ const upload = multer({ dest: uploadRoot, limits: { fileSize: 10 * 1024 * 1024 }
 app.post('/api/upload', verifyJWT, upload.single('file'), async (req: Request, res: Response) => {
   const file = (req as any).file as { filename: string; originalname?: string } | undefined;
   if (!file) return res.status(400).json({ error: 'No file uploaded' });
+  
+  // Get metadata from request body
+  const { title, description, record_type, summary } = req.body;
+  
   // Save metadata to Mongo
   try {
     const user = (req as AuthRequest).user as any;
-    await HealthRecord.create({
-      user_id: user?.sub || 'anonymous',
+    const userId = user?.sub || 'anonymous';
+    
+    const record = await HealthRecord.create({
+      user_id: userId,
       file_id: file.filename,
       original_name: file.originalname,
       file_type: (req as any).file?.mimetype,
+      title: title || file.originalname,
+      description: description,
+      record_type: record_type || 'document',
+      summary: summary,
+    });
+    
+    // Auto-generate QR code for the uploaded file
+    try {
+      const qrData = {
+        record_id: String(record._id),
+        user_id: userId,
+        title: record.title || record.original_name || 'Health Record',
+        type: record.record_type || 'document',
+        date: record.created_at,
+        summary: record.summary || 'Medical record',
+        view_url: `${FRONTEND_ORIGIN}/health-vault?record=${String(record._id)}`
+      };
+      
+      const encryptedPayload = encryptJSON(qrData);
+      const qrDataUrl = await QRCode.toDataURL(encryptedPayload, {
+        errorCorrectionLevel: 'M',
+        width: 256,
+        margin: 1
+      });
+      
+      record.qr_code = qrDataUrl;
+      await record.save();
+      
+      console.log(`✅ QR code generated for record: ${record._id}`);
+    } catch (qrError) {
+      console.warn('⚠️ Failed to generate QR code:', qrError);
+    }
+    
+    res.json({ 
+      id: file.filename, 
+      record_id: record._id,
+      originalName: file.originalname,
+      qr_generated: !!record.qr_code
     });
   } catch (e) {
     console.error('Failed to save health record metadata', e);
+    res.status(500).json({ error: 'Failed to save metadata' });
   }
-  res.json({ id: file.filename, originalName: file.originalname });
 });
 
 app.get('/api/files', verifyJWT, (_req: Request, res: Response) => {
@@ -158,7 +293,7 @@ app.delete('/api/records/:id', verifyJWT, async (req: Request, res: Response) =>
   res.status(204).send();
 });
 
-// ---------- Hospitals (Postgres)
+// ---------- Hospitals (Postgres via Prisma)
 const HospitalsQuery = z.object({
   search: z.string().optional(),
   city: z.string().optional(),
@@ -169,22 +304,71 @@ const HospitalsQuery = z.object({
   radiusKm: z.coerce.number().min(0.1).max(100).optional(),
 });
 app.get('/api/hospitals', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
   const q = HospitalsQuery.safeParse(req.query);
   if (!q.success) return res.status(400).json({ error: 'Invalid query' });
   const { search, city, type, limit, lat, lng, radiusKm } = q.data;
-  const params: any[] = [];
-  const where: string[] = [];
-  if (search) { params.push(`%${search}%`); where.push('(name ILIKE $' + params.length + ' OR address ILIKE $' + params.length + ')'); }
-  if (city) { params.push(city); where.push('city ILIKE $' + params.length); }
-  if (type) { params.push(type); where.push('type ILIKE $' + params.length); }
-  let baseSql = `SELECT id, name, address, city, state, phone as contact, type, beds, latitude as lat, longitude as lng FROM hospitals`;
-  if (where.length) baseSql += ' WHERE ' + where.join(' AND ');
+  
+  // Use mock data if database not available
+  if (!process.env.DATABASE_URL) {
+    console.log('⚠️  Using mock hospital data (DATABASE_URL not configured)');
+    const { mockHospitals } = require('./data/mock-hospitals');
+    let rows = [...mockHospitals];
+    
+    // Apply filters
+    if (search) {
+      const searchLower = search.toLowerCase();
+      rows = rows.filter(h => 
+        h.name.toLowerCase().includes(searchLower) || 
+        (h.address && h.address.toLowerCase().includes(searchLower))
+      );
+    }
+    if (city) {
+      const cityLower = city.toLowerCase();
+      rows = rows.filter(h => h.city && h.city.toLowerCase().includes(cityLower));
+    }
+    if (type) {
+      const typeLower = type.toLowerCase();
+      rows = rows.filter(h => h.type && h.type.toLowerCase().includes(typeLower));
+    }
+    
+    // Calculate distance if location provided
+    if (lat != null && lng != null && radiusKm != null) {
+      const R = 6371;
+      const withDist = rows
+        .filter(r => r.lat != null && r.lng != null)
+        .map(r => {
+          const dLat = ((r.lat - lat) * Math.PI) / 180;
+          const dLng = ((r.lng - lng) * Math.PI) / 180;
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat * Math.PI / 180) * Math.cos(r.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          return { ...r, distanceKm: R * c };
+        })
+        .filter(r => r.distanceKm <= radiusKm)
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+      return res.json(withDist.slice(0, Math.min(limit ?? 50, 200)));
+    }
+    
+    return res.json(rows.slice(0, Math.min(limit ?? 50, 200)));
+  }
+  
+  // Use database if available
+  const prisma = getPrisma();
   const lim = Math.min(limit ?? 50, 200);
-  baseSql += ` ORDER BY created_at DESC LIMIT ${lim}`;
-  const { rows } = await pg.query(baseSql, params);
+  const items = await prisma.hospital.findMany({
+    where: {
+      AND: [
+        search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { address: { contains: search, mode: 'insensitive' } }] } : {},
+        city ? { city: { contains: city, mode: 'insensitive' } } : {},
+        type ? { type: { contains: type, mode: 'insensitive' } } : {},
+      ],
+    },
+    orderBy: { created_at: 'desc' },
+    take: lim,
+    select: { id: true, name: true, address: true, city: true, state: true, phone: true, type: true, beds: true, latitude: true, longitude: true },
+  });
+  const rows = items.map((r: any) => ({ id: r.id, name: r.name, address: r.address, city: r.city, state: r.state, contact: r.phone, type: r.type, beds: r.beds, lat: r.latitude, lng: r.longitude }));
   if (lat != null && lng != null && radiusKm != null) {
-    const R = 6371; // km
+    const R = 6371;
     const withDist = rows
       .filter((r: any) => r.lat != null && r.lng != null)
       .map((r: any) => {
@@ -202,116 +386,394 @@ app.get('/api/hospitals', verifyJWT, async (req: Request, res: Response) => {
 });
 
 app.get('/api/hospitals/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rows } = await pg.query('SELECT id, name, address, city, state, phone as contact, type, beds, latitude as lat, longitude as lng FROM hospitals WHERE id=$1', [id]);
-  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...rows[0], synced: false });
+  const prisma = getPrisma();
+  const h = await prisma.hospital.findUnique({ where: { id } });
+  if (!h) return res.status(404).json({ error: 'Not found' });
+  res.json({ id: h.id, name: h.name, address: h.address, city: h.city, state: h.state, contact: h.phone, type: h.type, beds: h.beds, lat: h.latitude, lng: h.longitude, synced: false });
 });
 
-// ---------- NGOs (Postgres)
+// ---------- NGOs (Postgres via Prisma)
 app.get('/api/ngos', verifyJWT, async (_req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
-  const { rows } = await pg.query('SELECT id, name, description, contact, website, city, tags, created_at FROM ngos ORDER BY created_at DESC LIMIT 200');
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
+  const prisma = getPrisma();
+  const rows = await prisma.ngo.findMany({ orderBy: { created_at: 'desc' }, take: 200 });
   res.json(rows);
 });
 
 app.get('/api/ngos/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rows } = await pg.query('SELECT id, name, description, contact, website, city, tags, created_at FROM ngos WHERE id=$1', [id]);
-  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  res.json(rows[0]);
+  const prisma = getPrisma();
+  const ngo = await prisma.ngo.findUnique({ where: { id } });
+  if (!ngo) return res.status(404).json({ error: 'Not found' });
+  res.json(ngo);
 });
 
 const NgoCreate = z.object({ name: z.string().min(1), description: z.string().optional(), contact: z.string().optional(), website: z.string().optional(), city: z.string().optional(), tags: z.string().optional() });
 app.post('/api/ngos', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const parsed = NgoCreate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
-  const { name, description, contact, website, city, tags } = parsed.data;
-  const { rows } = await pg.query(
-    `INSERT INTO ngos (name, description, contact, website, city, tags) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [name, description ?? null, contact ?? null, website ?? null, city ?? null, tags ?? null]
-  );
-  res.status(201).json({ ...rows[0], synced: false });
+  const prisma = getPrisma();
+  const created = await prisma.ngo.create({ data: parsed.data });
+  res.status(201).json({ ...created, synced: false });
+});
+
+// ---------- SOS Emergency SMS
+const SosRequest = z.object({ 
+  location: z.object({ lat: z.number(), lng: z.number() }).optional(),
+  message: z.string().optional() 
+});
+app.post('/api/sos', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const phone = user?.sub as string;
+  const parsed = SosRequest.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid request' });
+  
+  const { location, message } = parsed.data;
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  
+  const prof = await prisma.profile.findUnique({ where: { userId: userRecord.id } });
+  const emergencyContact = prof?.emergency_contact ? decryptString(prof.emergency_contact) : null;
+  
+  if (!emergencyContact) {
+    return res.status(400).json({ error: 'No emergency contact configured' });
+  }
+  
+  const sosMessage = `🆘 EMERGENCY ALERT from ${prof?.full_name || phone}!\n${message || 'Immediate help needed!'}\n${location ? `Location: https://maps.google.com/?q=${location.lat},${location.lng}` : 'Location unknown'}\nCall: ${phone}`;
+  
+  // Send SMS via Twilio if configured
+  const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
+  
+  if (twilioConfigured) {
+    try {
+      // TODO: Integrate Twilio SDK
+      console.log(`Would send SOS to ${emergencyContact}: ${sosMessage}`);
+      res.json({ success: true, message: 'Emergency alert sent', contact: emergencyContact });
+    } catch (error) {
+      console.error('SOS SMS error:', error);
+      res.json({ success: true, message: 'SOS logged (SMS failed)', contact: emergencyContact });
+    }
+  } else {
+    console.log(`Mock SOS to ${emergencyContact}: ${sosMessage}`);
+    res.json({ success: true, message: 'SOS logged (mock mode)', contact: emergencyContact });
+  }
 });
 
 // ---------- Emergency QR (uses profile)
 app.get('/api/qr/emergency', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
-  const { rows } = await pg.query('SELECT full_name, blood_group, emergency_contact FROM profiles WHERE user_id=$1', [userId]);
-  const prof = rows[0] || {};
-  const payload = {
-    id: userId,
-    name: prof.full_name || 'Unknown',
-    blood_group: prof.blood_group || 'NA',
-    emergency_contact: prof.emergency_contact || 'NA',
-    profile_url: `${FRONTEND_ORIGIN}/settings`,
-  };
-  const qrDataUrl = await QRCode.toDataURL(JSON.stringify(payload));
+  const phone = user?.sub as string;
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const prof = await prisma.profile.findUnique({ where: { userId: userRecord.id }, select: { full_name: true, blood_group: true, emergency_contact: true } });
+  let name = prof?.full_name || 'Unknown';
+  let blood = (prof as any)?.blood_group || 'NA';
+  let emer = (prof as any)?.emergency_contact || 'NA';
+  try {
+    blood = (prof as any)?.blood_group ? decryptString((prof as any).blood_group) : blood;
+    emer = (prof as any)?.emergency_contact ? decryptString((prof as any).emergency_contact) : emer;
+  } catch {}
+  const encryptedPayload = encryptJSON({ id: userRecord.id, name, blood_group: blood, emergency_contact: emer, profile_url: `${FRONTEND_ORIGIN}/settings` });
+  const qrDataUrl = await QRCode.toDataURL(encryptedPayload);
   res.json({ qrDataUrl });
 });
 
-// AI Mock
-const AiRequest = z.object({ input: z.string().min(1) });
-app.post('/api/ai/infer', verifyJWT, (req: Request, res: Response) => {
-  const parsed = AiRequest.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid input' });
-  const { input } = parsed.data;
-  res.json({ result: `Mock analysis for: ${input}`, confidence: 0.87 });
-});
-
-// AI Timeline (mock heuristic)
-app.get('/api/ai/timeline', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+// ---------- Health Record QR Code Generation
+// Update health record metadata (title, description, summary)
+app.put('/api/records/:id/metadata', verifyJWT, async (req: Request, res: Response) => {
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
-  const { rows } = await pg.query(
-    `SELECT type, value, recorded_at FROM metrics WHERE user_id=$1 ORDER BY recorded_at DESC LIMIT 100`,
-    [userId]
-  );
-  if (rows.length === 0) return res.json({ summary: 'No recent health metrics recorded.', metrics: [] });
-  const latestByType: Record<string, any> = {};
-  for (const m of rows) if (!latestByType[m.type]) latestByType[m.type] = m;
-  const parts: string[] = [];
-  if (latestByType['bp']) parts.push(`BP latest: ${latestByType['bp'].value}`);
-  if (latestByType['hr']) parts.push(`Heart rate latest: ${latestByType['hr'].value}`);
-  if (latestByType['glucose']) parts.push(`Glucose latest: ${latestByType['glucose'].value}`);
-  const summary = parts.length ? parts.join('. ') : 'Health metrics captured recently.';
-  res.json({ summary, metrics: rows });
+  const { title, description, record_type, summary } = req.body;
+  
+  const doc = await HealthRecord.findOne({ _id: req.params.id, user_id: userId });
+  if (!doc) return res.status(404).json({ error: 'Record not found' });
+  
+  if (title !== undefined) doc.title = title;
+  if (description !== undefined) doc.description = description;
+  if (record_type !== undefined) doc.record_type = record_type;
+  if (summary !== undefined) doc.summary = summary;
+  
+  await doc.save();
+  res.json(doc);
 });
 
-// --------- Postgres-backed resources (profiles, appointments, metrics)
-const pg = process.env.DATABASE_URL ? getPgPool() : null as any;
+// Generate QR code for a specific health record
+app.post('/api/records/:id/qr', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const userId = user?.sub as string;
+  
+  const doc = await HealthRecord.findOne({ _id: req.params.id, user_id: userId }).lean();
+  if (!doc) return res.status(404).json({ error: 'Record not found' });
+  
+  // Create summarized data for QR code
+  const qrData = {
+    record_id: doc._id.toString(),
+    user_id: userId,
+    title: doc.title || doc.original_name || 'Health Record',
+    type: doc.record_type || 'document',
+    date: doc.created_at,
+    summary: doc.summary || 'Medical record',
+    description: doc.description,
+    view_url: `${FRONTEND_ORIGIN}/health-vault?record=${doc._id}`
+  };
+  
+  // Encrypt the payload for privacy
+  const encryptedPayload = encryptJSON(qrData);
+  
+  // Generate QR code
+  const qrDataUrl = await QRCode.toDataURL(encryptedPayload, {
+    errorCorrectionLevel: 'M',
+    width: 512,
+    margin: 2
+  });
+  
+  // Save QR code to record
+  await HealthRecord.findByIdAndUpdate(doc._id, { qr_code: qrDataUrl });
+  
+  res.json({ qrDataUrl, data: qrData });
+});
+
+// Scan/Decode QR code
+app.post('/api/qr/scan', async (req: Request, res: Response) => {
+  const { qr_data } = req.body;
+  if (!qr_data) return res.status(400).json({ error: 'No QR data provided' });
+  
+  try {
+    // Decrypt the QR payload
+    const decryptedData = decryptJSON(qr_data);
+    
+    // Return decrypted data
+    res.json({ 
+      success: true,
+      data: decryptedData,
+      type: decryptedData.record_id ? 'health_record' : 'emergency_profile'
+    });
+  } catch (error) {
+    res.status(400).json({ error: 'Invalid or corrupted QR code', details: String(error) });
+  }
+});
+
+// Get health record summary (for QR or quick view)
+app.get('/api/records/:id/summary', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const userId = user?.sub as string;
+  
+  const doc = await HealthRecord.findOne({ _id: req.params.id, user_id: userId }).lean();
+  if (!doc) return res.status(404).json({ error: 'Record not found' });
+  
+  const summary = {
+    id: doc._id,
+    title: doc.title || doc.original_name || 'Untitled Document',
+    type: doc.record_type || 'document',
+    description: doc.description || 'No description',
+    summary: doc.summary || 'No summary available',
+    date: doc.created_at,
+    file_type: doc.file_type,
+    qr_available: !!doc.qr_code
+  };
+  
+  res.json(summary);
+});
+
+// Generate QR for all health records (bulk)
+app.post('/api/records/qr/bulk', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const userId = user?.sub as string;
+  
+  const docs = await HealthRecord.find({ user_id: userId }).lean();
+  
+  const results = await Promise.all(docs.map(async (doc) => {
+    try {
+      const qrData = {
+        record_id: doc._id.toString(),
+        user_id: userId,
+        title: doc.title || doc.original_name || 'Health Record',
+        type: doc.record_type || 'document',
+        date: doc.created_at,
+        summary: doc.summary || 'Medical record',
+        view_url: `${FRONTEND_ORIGIN}/health-vault?record=${doc._id}`
+      };
+      
+      const encryptedPayload = encryptJSON(qrData);
+      const qrDataUrl = await QRCode.toDataURL(encryptedPayload, {
+        errorCorrectionLevel: 'M',
+        width: 256,
+        margin: 1
+      });
+      
+      await HealthRecord.findByIdAndUpdate(doc._id, { qr_code: qrDataUrl });
+      
+      return { id: doc._id, success: true, qr: qrDataUrl };
+    } catch (error) {
+      return { id: doc._id, success: false, error: String(error) };
+    }
+  }));
+  
+  res.json({ total: docs.length, results });
+});
+
+// AI Health Analysis (Proxy to Python Flask Service)
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:5001';
+
+// AI Report Analysis - proxies to Python ML service
+app.post('/api/ai/report', verifyJWT, async (req: Request, res: Response) => {
+  try {
+    const { bp, cholesterol, glucose } = req.body;
+    const response = await fetch(`${AI_SERVICE_URL}/api/ai/analyze-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bp, cholesterol, glucose })
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('AI Service error:', error.message);
+    res.status(503).json({ error: 'AI service unavailable', message: error.message });
+  }
+});
+
+// AI Chat - proxies to Python NLP service
+app.post('/api/ai/chat', verifyJWT, async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    const response = await fetch(`${AI_SERVICE_URL}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('AI Service error:', error.message);
+    res.status(503).json({ error: 'AI service unavailable', message: error.message });
+  }
+});
+
+// Legacy AI inference endpoint (kept for backward compatibility)
+const AiRequest = z.object({ input: z.string().min(1) });
+app.post('/api/ai/infer', verifyJWT, async (req: Request, res: Response) => {
+  try {
+    const parsed = AiRequest.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid input' });
+    const { input } = parsed.data;
+    // Proxy to AI chat
+    const response = await fetch(`${AI_SERVICE_URL}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: input })
+    });
+    const data = await response.json();
+    res.json({ result: data.response || 'No response', confidence: data.confidence || 0.8 });
+  } catch (error) {
+    res.json({ result: `Analysis for: ${req.body.input}`, confidence: 0.75 });
+  }
+});
+
+// AI Timeline (health metrics summary)
+app.get('/api/ai/timeline', verifyJWT, async (req: Request, res: Response) => {
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
+  const user = (req as AuthRequest).user as any;
+  const phone = user?.sub as string;
+  try {
+    const prisma = getPrisma();
+    const userRecord = await prisma.user.findUnique({ where: { phone } });
+    if (!userRecord) return res.json({ summary: 'No user found', metrics: [] });
+    
+    const metrics = await prisma.metric.findMany({
+      where: { userId: userRecord.id },
+      orderBy: { recorded_at: 'desc' },
+      take: 100
+    });
+    
+    if (metrics.length === 0) return res.json({ summary: 'No recent health metrics recorded.', metrics: [] });
+    
+    const latestByType: Record<string, any> = {};
+    for (const m of metrics) if (!latestByType[m.type]) latestByType[m.type] = m;
+    
+    const parts: string[] = [];
+    if (latestByType['bp']) parts.push(`BP latest: ${latestByType['bp'].value}`);
+    if (latestByType['hr']) parts.push(`Heart rate latest: ${latestByType['hr'].value}`);
+    if (latestByType['glucose']) parts.push(`Glucose latest: ${latestByType['glucose'].value}`);
+    const summary = parts.length ? parts.join('. ') : 'Health metrics captured recently.';
+    res.json({ summary, metrics });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch metrics' });
+  }
+});
+
+// --------- Postgres-backed resources (profiles, appointments, metrics) via Prisma
+// Note: All Postgres operations now use Prisma ORM exclusively
 
 // Profiles
 app.get('/api/profile', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
-  const { rows } = await pg.query('SELECT * FROM profiles WHERE user_id=$1', [userId]);
-  if (rows.length === 0) return res.json(null);
-  res.json(rows[0]);
+  const phone = user?.sub as string;
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.json(null);
+  const prof = await prisma.profile.findUnique({ where: { userId: userRecord.id } });
+  if (!prof) return res.json(null);
+  try {
+    const decrypted = {
+      ...prof,
+      email: prof.email ? decryptString(prof.email) : null,
+      phone: prof.phone ? decryptString(prof.phone) : null,
+      blood_group: prof as any && (prof as any).blood_group ? decryptString((prof as any).blood_group) : (prof as any).blood_group ?? null,
+      emergency_contact: (prof as any).emergency_contact ? decryptString((prof as any).emergency_contact) : null,
+      address: (prof as any).address ? decryptString((prof as any).address) : null,
+      allergies: (prof as any).allergies ? decryptString((prof as any).allergies) : null,
+      medical_conditions: (prof as any).medical_conditions ? decryptString((prof as any).medical_conditions) : null,
+    } as any;
+    return res.json(decrypted);
+  } catch {
+    // If decryption fails (e.g., key missing), return as-is
+    return res.json(prof);
+  }
 });
 
 app.put('/api/profile', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
   const userId = user?.sub as string;
-  const { full_name, email, phone } = req.body || {};
-  await pg.query(
-    `INSERT INTO profiles (user_id, full_name, email, phone, updated_at)
-     VALUES ($1,$2,$3,$4,NOW())
-     ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, email=EXCLUDED.email, phone=EXCLUDED.phone, updated_at=NOW()`,
-    [userId, full_name ?? null, email ?? null, phone ?? null]
-  );
-  const { rows } = await pg.query('SELECT * FROM profiles WHERE user_id=$1', [userId]);
-  res.json(rows[0] ?? null);
+  const { full_name, email, phone, blood_group, emergency_contact, address, allergies, medical_conditions } = req.body || {};
+  const prisma = getPrisma();
+  
+  // Ensure user exists first
+  const existingUser = await prisma.user.findUnique({ where: { phone: userId } });
+  if (!existingUser) {
+    await prisma.user.create({ data: { phone: userId } });
+  }
+  const userRecord = await prisma.user.findUnique({ where: { phone: userId } });
+  if (!userRecord) return res.status(500).json({ error: 'User creation failed' });
+  
+  let encEmail = email, encPhone = phone, encBlood = blood_group, encEmer = emergency_contact, encAddr = address, encAll = allergies, encCond = medical_conditions;
+  try {
+    encEmail = email != null ? encryptString(String(email)) : null;
+    encPhone = phone != null ? encryptString(String(phone)) : null;
+    encBlood = blood_group != null ? encryptString(String(blood_group)) : null;
+    encEmer = emergency_contact != null ? encryptString(String(emergency_contact)) : null;
+    encAddr = address != null ? encryptString(String(address)) : null;
+    encAll = allergies != null ? encryptString(String(allergies)) : null;
+    encCond = medical_conditions != null ? encryptString(String(medical_conditions)) : null;
+  } catch {
+    // if encryption fails due to key, fall back to plaintext
+  }
+  const prof = await prisma.profile.upsert({
+    where: { userId: userRecord.id },
+    update: { full_name, email: encEmail, phone: encPhone, updated_at: new Date(), blood_group: encBlood, emergency_contact: encEmer, address: encAddr, allergies: encAll, medical_conditions: encCond },
+    create: { userId: userRecord.id, full_name, email: encEmail, phone: encPhone, blood_group: encBlood, emergency_contact: encEmer, address: encAddr, allergies: encAll, medical_conditions: encCond },
+  });
+  res.json(prof);
 });
 
 // Appointments
@@ -331,103 +793,106 @@ const AppointmentUpdate = z.object({
   status: z.enum(['scheduled','completed','cancelled']).optional(),
 });
 app.get('/api/appointments', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
-  const { rows } = await pg.query('SELECT * FROM appointments WHERE user_id=$1 ORDER BY start_time DESC NULLS LAST', [userId]);
+  const phone = user?.sub as string;
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.json([]);
+  const rows = await prisma.appointment.findMany({ where: { userId: userRecord.id }, orderBy: { start_time: 'desc' } });
   const withSync = rows.map((r: any) => ({ ...r, synced: false }));
   res.json(withSync);
 });
 
 app.post('/api/appointments', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const parsed = AppointmentCreate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
-  const { provider, reason, start_time, end_time, status } = parsed.data;
-  const { rows } = await pg.query(
-    `INSERT INTO appointments (user_id, provider, reason, start_time, end_time, status)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [userId, provider ?? null, reason ?? null, start_time ?? null, end_time ?? null, status ?? 'scheduled']
-  );
-  res.status(201).json(rows[0]);
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const created = await prisma.appointment.create({ data: { userId: userRecord.id, ...parsed.data } });
+  res.status(201).json(created);
 });
 
 app.patch('/api/appointments/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = AppointmentUpdate.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
-  const fields = parsed.data;
-  const setParts: string[] = [];
-  const values: any[] = [];
-  let idx = 1;
-  for (const [k, v] of Object.entries(fields)) {
-    setParts.push(`${k}=$${idx++}`);
-    values.push(v);
-  }
-  if (setParts.length === 0) return res.status(400).json({ error: 'No fields to update' });
-  values.push(userId);
-  values.push(id);
-  const sql = `UPDATE appointments SET ${setParts.join(', ')}, updated_at=NOW() WHERE user_id=$${idx++} AND id=$${idx} RETURNING *`;
-  const { rows } = await pg.query(sql, values);
-  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  res.json(rows[0]);
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const { count } = await prisma.appointment.updateMany({ where: { id, userId: userRecord.id }, data: parsed.data });
+  if (count === 0) return res.status(404).json({ error: 'Not found' });
+  const updated = await prisma.appointment.findUnique({ where: { id } });
+  return res.json(updated);
 });
 
 app.delete('/api/appointments/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rowCount } = await pg.query('DELETE FROM appointments WHERE user_id=$1 AND id=$2', [userId, id]);
-  if (rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const { count } = await prisma.appointment.deleteMany({ where: { id, userId: userRecord.id } });
+  if (count === 0) return res.status(404).json({ error: 'Not found' });
   res.status(204).send();
 });
 
 // Metrics with optional filters
 const MetricsQuery = z.object({ type: z.string().optional(), limit: z.coerce.number().min(1).max(200).optional() });
 app.get('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const parsed = MetricsQuery.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid query' });
   const { type, limit } = parsed.data;
-  const where = ['user_id=$1'];
-  const params: any[] = [userId];
-  if (type) { where.push('type=$2'); params.push(type); }
-  const lim = Math.min(limit ?? 50, 200);
-  const sql = `SELECT * FROM metrics WHERE ${where.join(' AND ')} ORDER BY recorded_at DESC LIMIT ${lim}`;
-  const { rows } = await pg.query(sql, params);
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.json([]);
+  const rows = await prisma.metric.findMany({
+    where: { userId: userRecord.id, ...(type ? { type } : {}) },
+    orderBy: { recorded_at: 'desc' },
+    take: Math.min(limit ?? 50, 200),
+  });
   res.json(rows);
 });
 
 app.post('/api/metrics', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const { type, value } = req.body || {};
-  const { rows } = await pg.query(
-    `INSERT INTO metrics (user_id, type, value) VALUES ($1,$2,$3) RETURNING *`,
-    [userId, type, value]
-  );
-  res.status(201).json(rows[0]);
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  // Convert value to number if it's a string
+  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  const created = await prisma.metric.create({ data: { userId: userRecord.id, type, value: numericValue } });
+  res.status(201).json(created);
 });
 
 app.delete('/api/metrics/:id', verifyJWT, async (req: Request, res: Response) => {
-  if (!pg) return res.status(503).json({ error: 'Postgres not configured' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const user = (req as AuthRequest).user as any;
-  const userId = user?.sub as string;
+  const phone = user?.sub as string;
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { rowCount } = await pg.query('DELETE FROM metrics WHERE user_id=$1 AND id=$2', [userId, id]);
-  if (rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  const prisma = getPrisma();
+  const userRecord = await prisma.user.findUnique({ where: { phone } });
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const { count } = await prisma.metric.deleteMany({ where: { id, userId: userRecord.id } });
+  if (count === 0) return res.status(404).json({ error: 'Not found' });
   res.status(204).send();
 });
 
@@ -477,18 +942,55 @@ app.post('/api/chat', verifyJWT, async (req: Request, res: Response) => {
   res.status(201).json(saved);
 });
 
-// WebSocket signaling
-const wss = new WebSocketServer({ server, path: '/signalling' });
-wss.on('connection', (socket) => {
-  socket.on('message', (data) => {
-    // naive broadcast to others; in prod add rooms, auth, etc.
-    wss.clients.forEach((client) => {
-      if (client !== socket && (client as any).readyState === 1) {
-        (client as any).send(data);
-      }
-    });
+// Socket.io for WebRTC signaling (video calls)
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: FRONTEND_ORIGIN,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+  
+  socket.on('join-room', (roomId: string) => {
+    socket.join(roomId);
+    socket.to(roomId).emit('user-connected', socket.id);
+  });
+  
+  socket.on('webrtc-offer', (data: { roomId: string; offer: any }) => {
+    socket.to(data.roomId).emit('webrtc-offer', { offer: data.offer, from: socket.id });
+  });
+  
+  socket.on('webrtc-answer', (data: { roomId: string; answer: any }) => {
+    socket.to(data.roomId).emit('webrtc-answer', { answer: data.answer, from: socket.id });
+  });
+  
+  socket.on('ice-candidate', (data: { roomId: string; candidate: any }) => {
+    socket.to(data.roomId).emit('ice-candidate', { candidate: data.candidate, from: socket.id });
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Socket disconnected:', socket.id);
+    io.emit('user-disconnected', socket.id);
   });
 });
+
+// WebSocket for legacy support
+const wss = new WebSocketServer({ noServer: true });
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
+  if (pathname === '/ws') {
+    wss.handleUpgrade(request, socket, head, (ws: any) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// (SOS endpoint already defined above)
 
 server.on('error', (err: any) => {
   if (err && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) {

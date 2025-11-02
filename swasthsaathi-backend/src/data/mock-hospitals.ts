@@ -1,0 +1,147 @@
+// Mock hospital data with coordinates for testing without database
+export const mockHospitals = [
+  {
+    id: 1,
+    name: "King George's Medical University",
+    address: "Shah Mina Road, Chowk, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2257540",
+    type: "Government",
+    beds: 1500,
+    lat: 26.8467,
+    lng: 80.9462
+  },
+  {
+    id: 2,
+    name: "Balrampur Hospital",
+    address: "Balrampur Hospital Road, Kaiser Bagh, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2620294",
+    type: "Government",
+    beds: 656,
+    lat: 26.8551,
+    lng: 80.9319
+  },
+  {
+    id: 3,
+    name: "Sahara Hospital",
+    address: "Viraj Khand, Gomti Nagar, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-6707777",
+    type: "Private",
+    beds: 300,
+    lat: 26.8509,
+    lng: 81.0036
+  },
+  {
+    id: 4,
+    name: "Medanta Hospital",
+    address: "Vibhuti Khand, Gomti Nagar, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-6776666",
+    type: "Private",
+    beds: 350,
+    lat: 26.8537,
+    lng: 80.9977
+  },
+  {
+    id: 5,
+    name: "Apollo Medics Hospital",
+    address: "Sector-B, Kanpur-Lucknow Road, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-4141000",
+    type: "Private",
+    beds: 250,
+    lat: 26.8398,
+    lng: 80.9189
+  },
+  {
+    id: 6,
+    name: "Ram Manohar Lohia Hospital",
+    address: "Vibhuti Khand, Gomti Nagar, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2785100",
+    type: "Government",
+    beds: 400,
+    lat: 26.8510,
+    lng: 80.9990
+  },
+  {
+    id: 7,
+    name: "Vivekananda Polyclinic & Institute",
+    address: "Vivekananda Polyclinic Road, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2623404",
+    type: "Private",
+    beds: 150,
+    lat: 26.8600,
+    lng: 80.9450
+  },
+  {
+    id: 8,
+    name: "Mayo Hospital",
+    address: "Mayo Road, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2621980",
+    type: "Private",
+    beds: 200,
+    lat: 26.8560,
+    lng: 80.9300
+  },
+  {
+    id: 9,
+    name: "Cloudnine Hospital",
+    address: "CP-3, Viraj Khand, Gomti Nagar, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-6740000",
+    type: "Private",
+    beds: 100,
+    lat: 26.8520,
+    lng: 80.9950
+  },
+  {
+    id: 10,
+    name: "Charak Hospital",
+    address: "Hardoi Road, Dubagga, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2725000",
+    type: "Private",
+    beds: 180,
+    lat: 26.8700,
+    lng: 80.9200
+  },
+  {
+    id: 11,
+    name: "Lok Bandhu Hospital",
+    address: "Sitapur Road, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2740000",
+    type: "Private",
+    beds: 120,
+    lat: 26.8800,
+    lng: 80.9500
+  },
+  {
+    id: 12,
+    name: "Shekhar Hospital",
+    address: "Indira Nagar, Lucknow",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    contact: "+91-522-2350000",
+    type: "Private",
+    beds: 90,
+    lat: 26.8400,
+    lng: 80.9800
+  }
+];

@@ -1,0 +1,97 @@
+// Prisma schema for SwasthSaathi
+// Provider: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  phone        String        @unique
+  created_at   DateTime      @default(now())
+  updated_at   DateTime      @updatedAt
+  profile      Profile?
+  appointments Appointment[]
+  metrics      Metric[]
+
+  @@map("users")
+}
+
+model Profile {
+  id                  Int      @id @default(autoincrement())
+  userId              String   @unique @map("user_id")
+  user                User     @relation(fields: [userId], references: [id])
+  full_name           String?
+  email               String?
+  phone               String?
+  dob                 DateTime?
+  blood_group         String?
+  emergency_contact   String?
+  address             String?
+  allergies           String?
+  medical_conditions  String?
+  updated_at          DateTime @default(now())
+
+  @@map("profiles")
+}
+
+model Hospital {
+  id         Int      @id @default(autoincrement())
+  name       String
+  address    String?
+  city       String?
+  state      String?
+  phone      String?
+  type       String?
+  beds       Int?
+  latitude   Float?
+  longitude  Float?
+  created_at DateTime @default(now())
+
+  @@map("hospitals")
+}
+
+model Ngo {
+  id         Int      @id @default(autoincrement())
+  name       String
+  description String?
+  contact    String?
+  website    String?
+  city       String?
+  tags       String?
+  created_at DateTime @default(now())
+
+  @@map("ngos")
+}
+
+model Appointment {
+  id          Int      @id @default(autoincrement())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id])
+  provider    String?
+  reason      String?
+  start_time  DateTime?
+  end_time    DateTime?
+  status      String?  @default("scheduled")
+  calendar_event_id String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+
+  @@map("appointments")
+}
+
+model Metric {
+  id          Int      @id @default(autoincrement())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id])
+  type        String
+  value       Float?
+  recorded_at DateTime @default(now())
+
+  @@map("metrics")
+}
