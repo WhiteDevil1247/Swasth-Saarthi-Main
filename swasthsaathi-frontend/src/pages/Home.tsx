@@ -77,6 +77,29 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative overflow-hidden rounded-2xl bg-gradient-primary p-8 lg:p-12 text-white shadow-elevated hover:shadow-glow transition-shadow duration-300 animate-zoom-in z-10">
         <div className="relative z-10 max-w-3xl">
+          {/* Logo with Circular Animation */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="relative w-16 h-16">
+              {/* Circular blended glow rings */}
+              <div className="absolute inset-0 -m-4 rounded-full bg-red-500/30 mix-blend-screen filter blur-xl animate-pulse"></div>
+              <div className="absolute inset-0 -m-6 rounded-full bg-red-400/20 mix-blend-screen filter blur-2xl animate-pulse" style={{ animationDelay: '0.5s' }}></div>
+              <div className="absolute inset-0 -m-8 rounded-full bg-red-300/10 mix-blend-screen filter blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+              
+              {/* Red Plus Icon */}
+              <div className="relative w-16 h-16 animate-float">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="relative w-12 h-12">
+                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-3.5 bg-gradient-to-r from-red-500 to-red-600 rounded-full shadow-lg"></div>
+                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-3.5 bg-gradient-to-b from-red-500 to-red-600 rounded-full shadow-lg"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <h2 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-white via-red-100 to-white bg-clip-text text-transparent animate-gradient-shift">
+              Swasth Saathi
+            </h2>
+          </div>
+          
           <div className="inline-block mb-4 px-4 py-2 bg-white/20 rounded-full backdrop-blur-sm">
             <p className="text-sm font-medium">🩺 Your 24/7 Health Partner</p>
           </div>
