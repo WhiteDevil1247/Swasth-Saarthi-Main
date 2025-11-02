@@ -58,9 +58,9 @@ const features = [
 ];
 
 const stats = [
-  { icon: Activity, label: "Active Users", value: "50K+" },
-  { icon: Hospital, label: "Partner Hospitals", value: "1,200+" },
-  { icon: Calendar, label: "Consultations", value: "100K+" },
+  { icon: Activity, label: "Target Active Users", value: "50K+" },
+  { icon: Hospital, label: "Expected Partner Hospitals", value: "1,200+" },
+  { icon: Calendar, label: "Projected Consultations", value: "100K+" },
 ];
 
 export default function Home() {
