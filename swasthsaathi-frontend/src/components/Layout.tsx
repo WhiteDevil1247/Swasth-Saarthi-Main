@@ -87,14 +87,16 @@ export function Layout({ children }: LayoutProps) {
         <div className="flex flex-col h-full p-4">
           {/* Logo */}
           <div className="flex items-center gap-3 mb-8 px-2 pt-4">
-            <div className="relative w-10 h-10 animate-logo-pulse">
+            <div className="relative w-10 h-10 animate-logo-pulse animate-red-glow">
               {/* Red Medical Plus */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative w-8 h-8">
-                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2.5 bg-gradient-to-r from-red-500 to-red-600 rounded-full"></div>
-                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-2.5 bg-gradient-to-b from-red-500 to-red-600 rounded-full"></div>
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2.5 bg-gradient-to-r from-red-500 to-red-600 rounded-full shadow-md"></div>
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-2.5 bg-gradient-to-b from-red-500 to-red-600 rounded-full shadow-md"></div>
                 </div>
               </div>
+              {/* Subtle glow ring */}
+              <div className="absolute inset-0 rounded-full bg-red-500/10 animate-ping"></div>
             </div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift">
               Swasth Saathi

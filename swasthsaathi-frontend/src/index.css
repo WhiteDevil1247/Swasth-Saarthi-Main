@@ -211,12 +211,50 @@ All colors MUST be HSL.
 /* Logo Pulse Animation */
 @keyframes logo-pulse {
   0%, 100% {
-    transform: scale(1);
+    transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 0 10px hsl(0 84% 60% / 0.5));
   }
+  25% {
+    transform: scale(1.05) rotate(2deg);
+    filter: drop-shadow(0 0 15px hsl(0 84% 60% / 0.7));
+  }
   50% {
-    transform: scale(1.05);
-    filter: drop-shadow(0 0 20px hsl(0 84% 60% / 0.8));
+    transform: scale(1.1) rotate(0deg);
+    filter: drop-shadow(0 0 20px hsl(0 84% 60% / 0.9));
+  }
+  75% {
+    transform: scale(1.05) rotate(-2deg);
+    filter: drop-shadow(0 0 15px hsl(0 84% 60% / 0.7));
+  }
+}
+
+/* Red Plus Icon Glow */
+@keyframes red-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px hsl(0 84% 60% / 0.4),
+                0 0 20px hsl(0 84% 60% / 0.3),
+                0 0 30px hsl(0 84% 60% / 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px hsl(0 84% 60% / 0.6),
+                0 0 40px hsl(0 84% 60% / 0.5),
+                0 0 60px hsl(0 84% 60% / 0.4);
+  }
+}
+
+/* Plus Icon Rotate Pulse */
+@keyframes plus-rotate {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(90deg) scale(1.1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1);
+  }
+  75% {
+    transform: rotate(270deg) scale(1.1);
   }
 }
 
@@ -358,4 +396,12 @@ All colors MUST be HSL.
 
 .animate-glow-pulse {
   animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-red-glow {
+  animation: red-glow 2s ease-in-out infinite;
+}
+
+.animate-plus-rotate {
+  animation: plus-rotate 8s linear infinite;
 }
