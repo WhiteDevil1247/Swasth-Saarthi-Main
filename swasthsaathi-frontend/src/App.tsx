@@ -19,6 +19,7 @@ import EmergencyQR from "./pages/EmergencyQR";
 import AIHealthTimeline from "./pages/AIHealthTimeline";
 import VernacularAssistant from "./pages/VernacularAssistant";
 import Terms from "./pages/Terms";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
                 <Route path="/ai-health-timeline" element={<Layout><AIHealthTimeline /></Layout>} />
                 <Route path="/assistant" element={<Layout><VernacularAssistant /></Layout>} />
                 <Route path="/accessibility" element={<Layout><Accessibility /></Layout>} />
+                <Route path="/profile" element={<Layout><Profile /></Layout>} />
                 <Route path="/settings" element={<Layout><Settings /></Layout>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

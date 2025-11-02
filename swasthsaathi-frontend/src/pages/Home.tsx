@@ -96,14 +96,6 @@ export default function Home() {
               </Button>
             </Link>
           </div>
-          <div className="mt-6 flex items-center gap-2">
-            <div className="flex -space-x-2">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="w-8 h-8 rounded-full bg-white/30 border-2 border-white" />
-              ))}
-            </div>
-            <p className="text-sm text-white/80">Join 50,000+ users trusting HealthSaathi</p>
-          </div>
         </div>
         <div className="absolute -right-20 -top-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" />
         <div className="absolute -right-40 -bottom-20 w-96 h-96 bg-secondary/20 rounded-full blur-3xl animate-pulse delay-75" />
