@@ -5,6 +5,8 @@ export type ApiOptions = {
   auth?: boolean;
 };
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
 export async function api(path: string, opts: ApiOptions = {}) {
   const { method = 'GET', body, headers = {}, auth = true } = opts;
   const init: RequestInit = {
@@ -27,7 +29,11 @@ export async function api(path: string, opts: ApiOptions = {}) {
     }
   }
 
-  const res = await fetch(`/api${path}`, init);
+  const targetPath = path.startsWith('http')
+    ? path
+    : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const res = await fetch(targetPath || path, init);
   if (!res.ok) {
     if (res.status === 401) {
       // optional: broadcast auth failure
