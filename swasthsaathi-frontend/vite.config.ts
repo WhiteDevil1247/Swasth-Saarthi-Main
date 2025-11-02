@@ -10,11 +10,11 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     proxy: {
       "/api": {
-        target: "http://localhost:8081",
+        target: "http://localhost:8083",
         changeOrigin: true,
       },
       "/signalling": {
-        target: "ws://localhost:8081",
+        target: "ws://localhost:8083",
         ws: true,
         changeOrigin: true,
       },
