@@ -17,7 +17,6 @@ export default function Auth() {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [loading, setLoading] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
   const { toast } = useToast();
 
   const handleRequestOtp = async (e: React.FormEvent) => {
@@ -32,20 +31,22 @@ export default function Auth() {
         auth: false 
       });
       
-      setOtpSent(true);
       setStep("otp");
       
-      // Show mock OTP if in dev mode
+      // Show different message based on mode
       if (response.code) {
+        // Development mode - show the mock code
         toast({ 
           title: "OTP Sent! 📱", 
           description: `Development Mode: Use code ${response.code}`,
           duration: 10000
         });
       } else {
+        // Production mode - real SMS sent
         toast({ 
           title: "OTP Sent! 📱", 
-          description: "Check your phone for verification code" 
+          description: "A 6-digit verification code has been sent to your phone via SMS. Please check your messages.",
+          duration: 8000
         });
       }
     } catch (error: any) {
