@@ -76,7 +76,7 @@ export default function Home() {
             Your Health Companion, Always by Your Side
           </h1>
           <p className="text-lg lg:text-xl mb-8 text-white/90 max-w-2xl">
-            HealthSaathi brings together AI-powered health guidance, medical records management, 
+            Swasth Saarthi brings together AI-powered health guidance, medical records management, 
             and instant access to healthcare services—all in one inclusive platform.
           </p>
           <div className="flex flex-wrap gap-4">

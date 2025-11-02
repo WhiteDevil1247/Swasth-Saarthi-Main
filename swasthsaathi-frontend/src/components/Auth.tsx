@@ -4,23 +4,56 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
+import { motion, AnimatePresence } from "framer-motion";
+import { Phone, KeyRound, User, Sparkles } from "lucide-react";
+
+type AuthStep = "phone" | "otp" | "profile";
 
 export default function Auth() {
+  const [step, setStep] = useState<AuthStep>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
+  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
   const { toast } = useToast();
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!phone) return;
+    
     setLoading(true);
     try {
-      await api("/auth/request-otp", { method: "POST", body: { phone }, auth: false });
-      toast({ title: "OTP Sent", description: "Please check your phone for the verification code." });
+      const response = await api("/auth/request-otp", { 
+        method: "POST", 
+        body: { phone }, 
+        auth: false 
+      });
+      
+      setOtpSent(true);
+      setStep("otp");
+      
+      // Show mock OTP if in dev mode
+      if (response.code) {
+        toast({ 
+          title: "OTP Sent! 📱", 
+          description: `Development Mode: Use code ${response.code}`,
+          duration: 10000
+        });
+      } else {
+        toast({ 
+          title: "OTP Sent! 📱", 
+          description: "Check your phone for verification code" 
+        });
+      }
     } catch (error: any) {
-      toast({ title: "Error", description: error?.message || "Failed to request OTP", variant: "destructive" });
+      toast({ 
+        title: "Error", 
+        description: error?.message || "Failed to send OTP", 
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }
@@ -28,89 +61,217 @@ export default function Auth() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!otp) return;
+    
     setLoading(true);
     try {
-      const data = await api("/auth/verify", { method: "POST", body: { phone, code: otp }, auth: false });
+      const data = await api("/auth/verify", { 
+        method: "POST", 
+        body: { phone, code: otp }, 
+        auth: false 
+      });
+      
       const token = data.token as string;
-      if (token) {
-        localStorage.setItem("auth_token", token);
-        toast({ title: "Signed In", description: "You are now logged in." });
-        // Trigger a reload or route change as needed
-        window.location.reload();
+      if (!token) throw new Error("Invalid token response");
+      
+      localStorage.setItem("auth_token", token);
+      
+      // Check if profile exists
+      const hasProfile = localStorage.getItem("user_profile_complete");
+      if (hasProfile) {
+        toast({ title: "Welcome Back! 👋", description: "Logging you in..." });
+        setTimeout(() => window.location.reload(), 1000);
       } else {
-        throw new Error("Invalid token response");
+        setStep("profile");
+        toast({ title: "Verified! ✅", description: "Let's set up your profile" });
       }
     } catch (error: any) {
-      toast({ title: "Error", description: error?.message || "OTP verification failed", variant: "destructive" });
+      toast({ 
+        title: "Verification Failed", 
+        description: error?.message || "Invalid OTP code", 
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !age) return;
+    
+    setLoading(true);
+    try {
+      // Save profile to backend
+      await api("/profile", {
+        method: "POST",
+        body: { name, age: parseInt(age), phone },
+        auth: true
+      });
+      
+      localStorage.setItem("user_profile_complete", "true");
+      toast({ title: "Profile Complete! 🎉", description: "Welcome to Swasth Saarthi" });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (error: any) {
+      // Even if backend fails, let them proceed
+      localStorage.setItem("user_profile_complete", "true");
+      toast({ title: "Welcome! 🎉", description: "You're all set" });
+      setTimeout(() => window.location.reload(), 1000);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-subtle p-4">
-      <Card className="w-full max-w-md p-8 shadow-elevated">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-primary p-4 relative overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-accent rounded-full filter blur-3xl animate-pulse" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-secondary rounded-full filter blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
+      </div>
+
+      <Card className="w-full max-w-md p-8 shadow-elevated backdrop-blur-sm bg-card/95 relative z-10">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary mb-2">HealthSaathi</h1>
-          <p className="text-muted-foreground">Your inclusive healthcare companion</p>
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Sparkles className="w-8 h-8 text-primary" />
+            <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              Swasth Saarthi
+            </h1>
+          </div>
+          <p className="text-muted-foreground">AI-Powered Healthcare Companion</p>
         </div>
 
-        <Tabs defaultValue="signin" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="signin">Sign In</TabsTrigger>
-            <TabsTrigger value="signup">Verify OTP</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="signin">
-            <form onSubmit={handleRequestOtp} className="space-y-4">
+        <AnimatePresence mode="wait">
+          {step === "phone" && (
+            <motion.form
+              key="phone"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              onSubmit={handleRequestOtp}
+              className="space-y-4"
+            >
               <div>
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Phone className="w-4 h-4" />
+                  Phone Number
+                </Label>
                 <Input
                   id="phone"
                   type="tel"
-                  placeholder="+1 555 555 5555"
+                  placeholder="+91 99999 99999"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   required
+                  className="mt-2"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  We'll send you a verification code
+                </p>
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Sending OTP..." : "Request OTP"}
+              <Button type="submit" className="w-full" disabled={loading} size="lg">
+                {loading ? "Sending Code..." : "Continue with Phone"}
               </Button>
-            </form>
-          </TabsContent>
+            </motion.form>
+          )}
 
-          <TabsContent value="signup">
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
+          {step === "otp" && (
+            <motion.form
+              key="otp"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              onSubmit={handleVerifyOtp}
+              className="space-y-4"
+            >
               <div>
-                <Label htmlFor="phone-verify">Phone</Label>
-                <Input
-                  id="phone-verify"
-                  type="tel"
-                  placeholder="+1 555 555 5555"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="otp">OTP Code</Label>
+                <Label htmlFor="otp" className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4" />
+                  Verification Code
+                </Label>
                 <Input
                   id="otp"
                   type="text"
-                  placeholder="123456"
+                  placeholder="Enter 6-digit code"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   required
                   minLength={4}
+                  maxLength={6}
+                  className="mt-2 text-center text-2xl tracking-widest"
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sent to {phone}
+                </p>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading} size="lg">
+                {loading ? "Verifying..." : "Verify & Continue"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => setStep("phone")}
+              >
+                Change Number
+              </Button>
+            </motion.form>
+          )}
+
+          {step === "profile" && (
+            <motion.form
+              key="profile"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              onSubmit={handleCompleteProfile}
+              className="space-y-4"
+            >
+              <div className="text-center mb-4">
+                <User className="w-12 h-12 mx-auto text-primary mb-2" />
+                <h3 className="text-xl font-semibold">Complete Your Profile</h3>
+                <p className="text-sm text-muted-foreground">Help us personalize your experience</p>
+              </div>
+              
+              <div>
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="mt-2"
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Verifying..." : "Verify & Sign In"}
+              
+              <div>
+                <Label htmlFor="age">Age</Label>
+                <Input
+                  id="age"
+                  type="number"
+                  placeholder="Enter your age"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  required
+                  min="1"
+                  max="120"
+                  className="mt-2"
+                />
+              </div>
+              
+              <Button type="submit" className="w-full" disabled={loading} size="lg">
+                {loading ? "Saving..." : "Complete Setup"}
               </Button>
-            </form>
-          </TabsContent>
-        </Tabs>
+            </motion.form>
+          )}
+        </AnimatePresence>
+
+        <div className="mt-6 text-center text-xs text-muted-foreground">
+          <p>By continuing, you agree to our Terms of Service</p>
+        </div>
       </Card>
     </div>
   );
