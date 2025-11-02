@@ -97,13 +97,13 @@ export function Layout({ children }: LayoutProps) {
         <div className="flex flex-col h-full p-4">
           {/* Logo */}
           <div className="flex items-center justify-center mb-8 px-2 pt-4">
-            <div className="relative">
-              <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift px-4 py-3 rounded-xl bg-gradient-primary/10 shadow-lg backdrop-blur-sm border border-primary/20">
+            <Link to="/" className="relative" onClick={() => setSidebarOpen(false)}>
+              <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift px-4 py-3 rounded-xl bg-gradient-primary/10 shadow-lg backdrop-blur-sm border border-primary/20 hover:scale-105 hover:shadow-glow transition-all cursor-pointer">
                 Swasth Saathi
               </h1>
               {/* Glow effect */}
               <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/20 via-accent/20 to-secondary/20 blur-xl rounded-xl animate-pulse"></div>
-            </div>
+            </Link>
           </div>
 
           {/* Navigation */}
