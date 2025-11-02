@@ -52,8 +52,11 @@ export function Layout({ children }: LayoutProps) {
       description: "See you soon!",
     });
     
-    // Navigate to auth page
-    navigate("/auth");
+    // Navigate to home, which will show Auth via ProtectedRoute
+    navigate("/");
+    
+    // Force page reload to trigger auth check
+    setTimeout(() => window.location.reload(), 500);
   };
 
   return (
@@ -95,7 +98,7 @@ export function Layout({ children }: LayoutProps) {
             <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center">
               <Heart className="w-6 h-6 text-sidebar-primary-foreground" />
             </div>
-            <h1 className="text-xl font-bold text-sidebar-foreground">Swasth Saarthi</h1>
+            <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">Swasth Saathi</h1>
           </div>
 
           {/* Navigation */}

@@ -22,36 +22,29 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRequestOtp = async (e?: React.FormEvent, isResend = false) => {
+    if (e) e.preventDefault();
     if (!phone) return;
     
     setLoading(true);
     try {
-      const response = await api("/auth/request-otp", { 
+      await api("/auth/request-otp", { 
         method: "POST", 
         body: { phone }, 
         auth: false 
       });
       
-      setStep("otp");
-      
-      // Show different message based on mode
-      if (response.code) {
-        // Development mode - show the mock code
-        toast({ 
-          title: "OTP Sent! 📱", 
-          description: `Development Mode: Use code ${response.code}`,
-          duration: 10000
-        });
-      } else {
-        // Production mode - real SMS sent
-        toast({ 
-          title: "OTP Sent! 📱", 
-          description: "A 6-digit verification code has been sent to your phone via SMS. Please check your messages.",
-          duration: 8000
-        });
+      if (!isResend) {
+        setStep("otp");
       }
+      
+      // Show success message without code
+      toast({ 
+        title: "✅ OTP Sent!", 
+        description: isResend ? "New code sent to your phone!" : "Please check your phone for the verification code.",
+        duration: 5000,
+        className: "bg-green-600 text-white border-green-700"
+      });
     } catch (error: any) {
       toast({ 
         title: "Error", 
@@ -61,6 +54,10 @@ export default function Auth() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResendOtp = () => {
+    handleRequestOtp(undefined, true);
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
@@ -151,7 +148,7 @@ export default function Auth() {
             </div>
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-1">
-            Swasth Saarthi
+            Swasth Saathi
           </h1>
           <p className="text-sm text-muted-foreground">AI-Powered Healthcare Companion</p>
         </div>
@@ -227,6 +224,18 @@ export default function Auth() {
                   Sent to {phone}
                 </p>
               </div>
+              
+              {/* Resend Code Button */}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleResendOtp}
+                disabled={loading}
+              >
+                {loading ? "Sending..." : "Resend Code"}
+              </Button>
+              
               <Button type="submit" className="w-full" disabled={loading} size="lg">
                 {loading ? "Verifying..." : "Verify & Continue"}
               </Button>
@@ -357,6 +366,18 @@ export default function Auth() {
                   Sent to {phone}
                 </p>
               </div>
+              
+              {/* Resend Code Button */}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleResendOtp}
+                disabled={loading}
+              >
+                {loading ? "Sending..." : "Resend Code"}
+              </Button>
+              
               <Button type="submit" className="w-full" disabled={loading} size="lg">
                 {loading ? "Verifying..." : "Verify & Sign Up"}
               </Button>
