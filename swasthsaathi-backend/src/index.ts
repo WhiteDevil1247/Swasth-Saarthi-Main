@@ -18,7 +18,7 @@ import QRCode from 'qrcode';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import compression from 'compression';
-import { encryptString, decryptString, encryptJSON } from './lib/crypto';
+import { encryptString, decryptString, encryptJSON, decryptJSON } from './lib/crypto';
 import { Server as SocketIOServer } from 'socket.io';
 
 const app = express();
@@ -199,19 +199,63 @@ const upload = multer({ dest: uploadRoot, limits: { fileSize: 10 * 1024 * 1024 }
 app.post('/api/upload', verifyJWT, upload.single('file'), async (req: Request, res: Response) => {
   const file = (req as any).file as { filename: string; originalname?: string } | undefined;
   if (!file) return res.status(400).json({ error: 'No file uploaded' });
+  
+  // Get metadata from request body
+  const { title, description, record_type, summary } = req.body;
+  
   // Save metadata to Mongo
   try {
     const user = (req as AuthRequest).user as any;
-    await HealthRecord.create({
-      user_id: user?.sub || 'anonymous',
+    const userId = user?.sub || 'anonymous';
+    
+    const record = await HealthRecord.create({
+      user_id: userId,
       file_id: file.filename,
       original_name: file.originalname,
       file_type: (req as any).file?.mimetype,
+      title: title || file.originalname,
+      description: description,
+      record_type: record_type || 'document',
+      summary: summary,
+    });
+    
+    // Auto-generate QR code for the uploaded file
+    try {
+      const qrData = {
+        record_id: String(record._id),
+        user_id: userId,
+        title: record.title || record.original_name || 'Health Record',
+        type: record.record_type || 'document',
+        date: record.created_at,
+        summary: record.summary || 'Medical record',
+        view_url: `${FRONTEND_ORIGIN}/health-vault?record=${String(record._id)}`
+      };
+      
+      const encryptedPayload = encryptJSON(qrData);
+      const qrDataUrl = await QRCode.toDataURL(encryptedPayload, {
+        errorCorrectionLevel: 'M',
+        width: 256,
+        margin: 1
+      });
+      
+      record.qr_code = qrDataUrl;
+      await record.save();
+      
+      console.log(`✅ QR code generated for record: ${record._id}`);
+    } catch (qrError) {
+      console.warn('⚠️ Failed to generate QR code:', qrError);
+    }
+    
+    res.json({ 
+      id: file.filename, 
+      record_id: record._id,
+      originalName: file.originalname,
+      qr_generated: !!record.qr_code
     });
   } catch (e) {
     console.error('Failed to save health record metadata', e);
+    res.status(500).json({ error: 'Failed to save metadata' });
   }
-  res.json({ id: file.filename, originalName: file.originalname });
 });
 
 app.get('/api/files', verifyJWT, (_req: Request, res: Response) => {
@@ -441,6 +485,140 @@ app.get('/api/qr/emergency', verifyJWT, async (req: Request, res: Response) => {
   const encryptedPayload = encryptJSON({ id: userRecord.id, name, blood_group: blood, emergency_contact: emer, profile_url: `${FRONTEND_ORIGIN}/settings` });
   const qrDataUrl = await QRCode.toDataURL(encryptedPayload);
   res.json({ qrDataUrl });
+});
+
+// ---------- Health Record QR Code Generation
+// Update health record metadata (title, description, summary)
+app.put('/api/records/:id/metadata', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const userId = user?.sub as string;
+  const { title, description, record_type, summary } = req.body;
+  
+  const doc = await HealthRecord.findOne({ _id: req.params.id, user_id: userId });
+  if (!doc) return res.status(404).json({ error: 'Record not found' });
+  
+  if (title !== undefined) doc.title = title;
+  if (description !== undefined) doc.description = description;
+  if (record_type !== undefined) doc.record_type = record_type;
+  if (summary !== undefined) doc.summary = summary;
+  
+  await doc.save();
+  res.json(doc);
+});
+
+// Generate QR code for a specific health record
+app.post('/api/records/:id/qr', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const userId = user?.sub as string;
+  
+  const doc = await HealthRecord.findOne({ _id: req.params.id, user_id: userId }).lean();
+  if (!doc) return res.status(404).json({ error: 'Record not found' });
+  
+  // Create summarized data for QR code
+  const qrData = {
+    record_id: doc._id.toString(),
+    user_id: userId,
+    title: doc.title || doc.original_name || 'Health Record',
+    type: doc.record_type || 'document',
+    date: doc.created_at,
+    summary: doc.summary || 'Medical record',
+    description: doc.description,
+    view_url: `${FRONTEND_ORIGIN}/health-vault?record=${doc._id}`
+  };
+  
+  // Encrypt the payload for privacy
+  const encryptedPayload = encryptJSON(qrData);
+  
+  // Generate QR code
+  const qrDataUrl = await QRCode.toDataURL(encryptedPayload, {
+    errorCorrectionLevel: 'M',
+    width: 512,
+    margin: 2
+  });
+  
+  // Save QR code to record
+  await HealthRecord.findByIdAndUpdate(doc._id, { qr_code: qrDataUrl });
+  
+  res.json({ qrDataUrl, data: qrData });
+});
+
+// Scan/Decode QR code
+app.post('/api/qr/scan', async (req: Request, res: Response) => {
+  const { qr_data } = req.body;
+  if (!qr_data) return res.status(400).json({ error: 'No QR data provided' });
+  
+  try {
+    // Decrypt the QR payload
+    const decryptedData = decryptJSON(qr_data);
+    
+    // Return decrypted data
+    res.json({ 
+      success: true,
+      data: decryptedData,
+      type: decryptedData.record_id ? 'health_record' : 'emergency_profile'
+    });
+  } catch (error) {
+    res.status(400).json({ error: 'Invalid or corrupted QR code', details: String(error) });
+  }
+});
+
+// Get health record summary (for QR or quick view)
+app.get('/api/records/:id/summary', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const userId = user?.sub as string;
+  
+  const doc = await HealthRecord.findOne({ _id: req.params.id, user_id: userId }).lean();
+  if (!doc) return res.status(404).json({ error: 'Record not found' });
+  
+  const summary = {
+    id: doc._id,
+    title: doc.title || doc.original_name || 'Untitled Document',
+    type: doc.record_type || 'document',
+    description: doc.description || 'No description',
+    summary: doc.summary || 'No summary available',
+    date: doc.created_at,
+    file_type: doc.file_type,
+    qr_available: !!doc.qr_code
+  };
+  
+  res.json(summary);
+});
+
+// Generate QR for all health records (bulk)
+app.post('/api/records/qr/bulk', verifyJWT, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user as any;
+  const userId = user?.sub as string;
+  
+  const docs = await HealthRecord.find({ user_id: userId }).lean();
+  
+  const results = await Promise.all(docs.map(async (doc) => {
+    try {
+      const qrData = {
+        record_id: doc._id.toString(),
+        user_id: userId,
+        title: doc.title || doc.original_name || 'Health Record',
+        type: doc.record_type || 'document',
+        date: doc.created_at,
+        summary: doc.summary || 'Medical record',
+        view_url: `${FRONTEND_ORIGIN}/health-vault?record=${doc._id}`
+      };
+      
+      const encryptedPayload = encryptJSON(qrData);
+      const qrDataUrl = await QRCode.toDataURL(encryptedPayload, {
+        errorCorrectionLevel: 'M',
+        width: 256,
+        margin: 1
+      });
+      
+      await HealthRecord.findByIdAndUpdate(doc._id, { qr_code: qrDataUrl });
+      
+      return { id: doc._id, success: true, qr: qrDataUrl };
+    } catch (error) {
+      return { id: doc._id, success: false, error: String(error) };
+    }
+  }));
+  
+  res.json({ total: docs.length, results });
 });
 
 // AI Health Analysis (Proxy to Python Flask Service)
