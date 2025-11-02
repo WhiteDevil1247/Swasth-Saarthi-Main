@@ -52,18 +52,33 @@ app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders:
 (async () => {
   try {
     if (process.env.MONGO_URI) {
-      await connectMongo(process.env.MONGO_URI);
-      console.log('✅ MongoDB connected');
-    }
-    if (process.env.DATABASE_URL) {
-      // Prefer Prisma for Postgres connectivity
-      await testPrismaConnection();
-      console.log('✅ PostgreSQL (Prisma) connected');
+      try {
+        await connectMongo(process.env.MONGO_URI);
+        console.log('✅ MongoDB connected');
+      } catch (mongoErr: any) {
+        console.error('❌ MongoDB connection failed:', mongoErr?.message || mongoErr);
+        console.log('⚠️  App will continue without MongoDB. Health records features may be limited.');
+        console.log('💡 To fix: Set up MongoDB Atlas at https://cloud.mongodb.com and add MONGO_URI to environment variables');
+      }
     } else {
-      console.log('⚠️  PostgreSQL not configured (DATABASE_URL missing)');
+      console.log('⚠️  MongoDB not configured (MONGO_URI missing). Some features may be limited.');
+    }
+    
+    if (process.env.DATABASE_URL) {
+      try {
+        // Prefer Prisma for Postgres connectivity
+        await testPrismaConnection();
+        console.log('✅ PostgreSQL (Prisma) connected');
+      } catch (pgErr: any) {
+        console.error('❌ PostgreSQL connection failed:', pgErr?.message || pgErr);
+        console.log('⚠️  App will continue without PostgreSQL. Some features may be limited.');
+      }
+    } else {
+      console.log('⚠️  PostgreSQL not configured (DATABASE_URL missing). Some features may be limited.');
     }
   } catch (err) {
     console.error('❌ Database init error:', err);
+    console.log('⚠️  App will continue with limited functionality');
   }
 })();
 
