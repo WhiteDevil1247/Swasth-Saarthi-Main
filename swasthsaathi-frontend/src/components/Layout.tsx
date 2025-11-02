@@ -87,7 +87,7 @@ export function Layout({ children }: LayoutProps) {
         <div className="flex flex-col h-full p-4">
           {/* Logo */}
           <div className="flex items-center gap-3 mb-8 px-2 pt-4">
-            <div className="relative w-10 h-10">
+            <div className="relative w-10 h-10 animate-logo-pulse">
               {/* Red Medical Plus */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative w-8 h-8">
@@ -96,7 +96,9 @@ export function Layout({ children }: LayoutProps) {
                 </div>
               </div>
             </div>
-            <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">Swasth Saathi</h1>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift">
+              Swasth Saathi
+            </h1>
           </div>
 
           {/* Navigation */}

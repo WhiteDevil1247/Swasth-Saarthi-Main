@@ -268,7 +268,7 @@ export default function Auth() {
         <div className="text-center mb-6">
           {/* Red Medical Logo */}
           <div className="flex justify-center mb-4">
-            <div className="relative w-20 h-20">
+            <div className="relative w-20 h-20 animate-logo-pulse">
               {/* Red Plus Symbol */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative w-16 h-16">
@@ -280,7 +280,7 @@ export default function Auth() {
               <div className="absolute inset-0 rounded-full border-4 border-red-500/30 animate-ping"></div>
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-1">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift mb-1">
             Swasth Saathi
           </h1>
           <p className="text-sm text-muted-foreground">AI-Powered Healthcare Companion</p>

@@ -73,23 +73,23 @@ export default function Profile() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Profile</h1>
+      <div className="animate-slide-in-left">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift mb-2">Profile</h1>
         <p className="text-muted-foreground">Manage your personal information</p>
       </div>
 
       {/* Profile Card */}
-      <Card className="p-8 shadow-elevated">
+      <Card className="p-8 shadow-elevated animate-zoom-in">
         <div className="flex flex-col md:flex-row gap-8">
           {/* Profile Image */}
           <div className="flex flex-col items-center gap-4">
-            <div className="relative">
+            <div className="relative animate-logo-pulse">
               {/* Demo Profile Image - Medical Theme */}
               <div className="w-32 h-32 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-glow">
                 <UserCircle className="w-24 h-24 text-white" />
               </div>
               {/* Online Status Indicator */}
-              <div className="absolute bottom-2 right-2 w-6 h-6 bg-green-500 rounded-full border-4 border-card"></div>
+              <div className="absolute bottom-2 right-2 w-6 h-6 bg-green-500 rounded-full border-4 border-card animate-glow-pulse"></div>
             </div>
             <div className="text-center">
               <h2 className="text-2xl font-bold text-foreground">{profile.name}</h2>

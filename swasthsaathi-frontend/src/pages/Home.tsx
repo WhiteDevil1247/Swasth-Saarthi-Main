@@ -65,9 +65,9 @@ const stats = [
 
 export default function Home() {
   return (
-    <div className="space-y-12 animate-fade-in">
+    <div className="space-y-12">
       {/* Hero Section */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-primary p-8 lg:p-12 text-white shadow-elevated hover:shadow-glow transition-shadow duration-300">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-primary p-8 lg:p-12 text-white shadow-elevated hover:shadow-glow transition-shadow duration-300 animate-zoom-in">
         <div className="relative z-10 max-w-3xl">
           <div className="inline-block mb-4 px-4 py-2 bg-white/20 rounded-full backdrop-blur-sm">
             <p className="text-sm font-medium">🩺 Your 24/7 Health Partner</p>
@@ -102,7 +102,7 @@ export default function Home() {
       </section>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-slide-in-left">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -112,7 +112,7 @@ export default function Home() {
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center">
+                <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center animate-float">
                   <Icon className="w-6 h-6 text-white" />
                 </div>
                 <div>
@@ -127,8 +127,8 @@ export default function Home() {
 
       {/* Features */}
       <section>
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold mb-3 text-foreground">
+        <div className="text-center mb-8 animate-zoom-in">
+          <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift">
             Everything You Need for Better Health
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
@@ -149,9 +149,10 @@ export default function Home() {
                     <div
                       className={cn(
                         "w-14 h-14 rounded-xl flex items-center justify-center mb-4",
-                        "bg-gradient-primary",
+                        "bg-gradient-primary animate-float",
                         "group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg"
                       )}
+                      style={{ animationDelay: `${index * 200}ms` }}
                     >
                       <Icon className="w-7 h-7 text-white" />
                     </div>
