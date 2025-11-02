@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
-import { Search, MapPin, Phone, Building2 } from 'lucide-react';
+import { Search, MapPin, Phone, Building2, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -25,6 +25,7 @@ interface Hospital {
   beds?: number;
   lat?: number;
   lng?: number;
+  mapLink?: string; // Google Maps link
   distanceKm?: number;
 }
 
@@ -211,6 +212,16 @@ export const HospitalNavigator = () => {
                               {hospital.distanceKm.toFixed(1)} km away
                             </p>
                           )}
+                          {hospital.mapLink && (
+                            <a
+                              href={hospital.mapLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                            >
+                              📍 Open in Google Maps
+                            </a>
+                          )}
                         </div>
                       </Popup>
                     </Marker>
@@ -269,6 +280,18 @@ export const HospitalNavigator = () => {
                                 <Phone className="w-4 h-4 mr-2 text-indigo-500" />
                                 {hospital.contact}
                               </p>
+                            )}
+                            {hospital.mapLink && (
+                              <a
+                                href={hospital.mapLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center mt-2 text-sm text-white bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1.5 rounded-lg hover:shadow-lg transition-all hover:scale-105"
+                              >
+                                <MapPin className="w-4 h-4 mr-1" />
+                                Open in Google Maps
+                                <ExternalLink className="w-3 h-3 ml-1" />
+                              </a>
                             )}
                           </div>
                         </div>

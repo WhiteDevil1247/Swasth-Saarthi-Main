@@ -13,6 +13,7 @@ export type Hospital = {
   beds?: number | null;
   lat?: number | null;
   lng?: number | null;
+  mapLink?: string | null; // Google Maps link
   distanceKm?: number;
 };
 

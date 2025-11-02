@@ -79,9 +79,15 @@ export default function HospitalNavigator() {
                     </a>
                   </Button>
                 )}
-                {(h.lat != null && h.lng != null) && (
+                {(h.mapLink || (h.lat != null && h.lng != null)) && (
                   <Button size="sm" asChild>
-                    <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${h.lat},${h.lng}`} aria-label={`Open ${h.name} in Google Maps`} title={`Open ${h.name} in Google Maps`}>
+                    <a 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      href={h.mapLink || `https://www.google.com/maps?q=${h.lat},${h.lng}`} 
+                      aria-label={`Open ${h.name} in Google Maps`} 
+                      title={`Open ${h.name} in Google Maps`}
+                    >
                       Open <ExternalLink className="w-4 h-4 ml-1" />
                     </a>
                   </Button>
