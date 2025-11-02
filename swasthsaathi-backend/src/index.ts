@@ -86,52 +86,55 @@ app.get('/api/me', verifyJWT, (req: Request, res: Response) => {
   res.json({ user });
 });
 
-// Auth (Twilio OTP with fallback)
+// Auth (MOCK OTP - Twilio code commented out)
 const OtpRequest = z.object({ phone: z.string().min(6) });
 app.post('/api/auth/request-otp', async (req: Request, res: Response) => {
   const parsed = OtpRequest.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid phone' });
   const { phone } = parsed.data;
   
+  // ===== TWILIO REAL OTP CODE (COMMENTED OUT) =====
   // Check if Twilio is configured and mock is disabled
-  const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
-  const mockOTP = process.env.MOCK_OTP !== 'false';
+  // const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
+  // const mockOTP = process.env.MOCK_OTP !== 'false';
+  // 
+  // if (twilioConfigured && !mockOTP) {
+  //   try {
+  //     const twilio = require('twilio');
+  //     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  //     
+  //     // Generate random 6-digit OTP
+  //     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  //     
+  //     // Store OTP in memory (in production use Redis with TTL)
+  //     const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
+  //     otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 }); // 5 min expiry
+  //     
+  //     // Send real SMS
+  //     await client.messages.create({
+  //       body: `Your Swasth Saathi OTP is: ${otp}. Valid for 5 minutes.`,
+  //       from: process.env.TWILIO_FROM,
+  //       to: phone
+  //     });
+  //     
+  //     console.log(`✅ Real OTP sent to ${phone}`);
+  //     res.json({ success: true, message: 'OTP sent via SMS' });
+  //   } catch (error: any) {
+  //     console.error('Twilio error:', error.message);
+  //     // Fallback to mock on error
+  //     res.json({ success: true, code: '123456', message: 'Mock OTP (Twilio error)' });
+  //   }
+  // } else {
+  // ===== END TWILIO CODE =====
   
-  if (twilioConfigured && !mockOTP) {
-    try {
-      const twilio = require('twilio');
-      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-      
-      // Generate random 6-digit OTP
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Store OTP in memory (in production use Redis with TTL)
-      const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
-      otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 }); // 5 min expiry
-      
-      // Send real SMS
-      await client.messages.create({
-        body: `Your Swasth Saathi OTP is: ${otp}. Valid for 5 minutes.`,
-        from: process.env.TWILIO_FROM,
-        to: phone
-      });
-      
-      console.log(`✅ Real OTP sent to ${phone}`);
-      res.json({ success: true, message: 'OTP sent via SMS' });
-    } catch (error: any) {
-      console.error('Twilio error:', error.message);
-      // Fallback to mock on error
-      res.json({ success: true, code: '123456', message: 'Mock OTP (Twilio error)' });
-    }
-  } else {
-    // Dev mode: fixed code
-    const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
-    const mockOtp = '123456';
-    otpStore.set(phone, { otp: mockOtp, expiresAt: Date.now() + 5 * 60 * 1000 });
-    console.log(`📱 Mock OTP stored for ${phone}: "${mockOtp}"`);
-    console.log(`   Store size: ${otpStore.size} entries`);
-    res.json({ success: true, code: mockOtp, message: 'Mock OTP (dev mode)' });
-  }
+  // MOCK OTP MODE: Always use 123456
+  const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
+  const mockOtp = '123456';
+  otpStore.set(phone, { otp: mockOtp, expiresAt: Date.now() + 5 * 60 * 1000 });
+  console.log(`📱 MOCK OTP stored for ${phone}: "${mockOtp}"`);
+  console.log(`   Store size: ${otpStore.size} entries`);
+  res.json({ success: true, code: mockOtp, message: 'Mock OTP - Use 123456 to continue' });
+  // }
 });
 
 const OtpVerify = z.object({ phone: z.string().min(6), code: z.string().min(4) });
@@ -141,7 +144,7 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
   const { phone, code } = parsed.data;
   
   // Verify OTP from store
-  const otpStore = (global as any).otpStore || new Map();
+  const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
   const stored = otpStore.get(phone);
   
   console.log(`🔐 OTP Verification attempt for ${phone}`);
@@ -175,8 +178,12 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
   otpStore.delete(phone);
   // Ensure user exists in database
   if (process.env.DATABASE_URL) {
-    const prisma = getPrisma();
-    await prisma.user.upsert({ where: { phone }, create: { phone }, update: {} });
+    try {
+      const prisma = getPrisma();
+      await prisma.user.upsert({ where: { phone }, create: { phone }, update: {} });
+    } catch (dbError: any) {
+      console.error('⚠️ Failed to upsert user in database:', dbError?.message || dbError);
+    }
   }
   const token = jwt.sign({ sub: phone, role: 'user' }, process.env.JWT_SECRET || 'devsecret', { expiresIn: '1h' });
   res.json({ token });
@@ -253,10 +260,54 @@ const HospitalsQuery = z.object({
   radiusKm: z.coerce.number().min(0.1).max(100).optional(),
 });
 app.get('/api/hospitals', verifyJWT, async (req: Request, res: Response) => {
-  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Postgres not configured' });
   const q = HospitalsQuery.safeParse(req.query);
   if (!q.success) return res.status(400).json({ error: 'Invalid query' });
   const { search, city, type, limit, lat, lng, radiusKm } = q.data;
+  
+  // Use mock data if database not available
+  if (!process.env.DATABASE_URL) {
+    console.log('⚠️  Using mock hospital data (DATABASE_URL not configured)');
+    const { mockHospitals } = require('./data/mock-hospitals');
+    let rows = [...mockHospitals];
+    
+    // Apply filters
+    if (search) {
+      const searchLower = search.toLowerCase();
+      rows = rows.filter(h => 
+        h.name.toLowerCase().includes(searchLower) || 
+        (h.address && h.address.toLowerCase().includes(searchLower))
+      );
+    }
+    if (city) {
+      const cityLower = city.toLowerCase();
+      rows = rows.filter(h => h.city && h.city.toLowerCase().includes(cityLower));
+    }
+    if (type) {
+      const typeLower = type.toLowerCase();
+      rows = rows.filter(h => h.type && h.type.toLowerCase().includes(typeLower));
+    }
+    
+    // Calculate distance if location provided
+    if (lat != null && lng != null && radiusKm != null) {
+      const R = 6371;
+      const withDist = rows
+        .filter(r => r.lat != null && r.lng != null)
+        .map(r => {
+          const dLat = ((r.lat - lat) * Math.PI) / 180;
+          const dLng = ((r.lng - lng) * Math.PI) / 180;
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat * Math.PI / 180) * Math.cos(r.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          return { ...r, distanceKm: R * c };
+        })
+        .filter(r => r.distanceKm <= radiusKm)
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+      return res.json(withDist.slice(0, Math.min(limit ?? 50, 200)));
+    }
+    
+    return res.json(rows.slice(0, Math.min(limit ?? 50, 200)));
+  }
+  
+  // Use database if available
   const prisma = getPrisma();
   const lim = Math.min(limit ?? 50, 200);
   const items = await prisma.hospital.findMany({

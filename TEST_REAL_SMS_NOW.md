@@ -5,9 +5,9 @@
 Your Twilio configuration is complete and active:
 
 ```
-✅ Account SID: AC7c2ebbdc3b0a7f7d13d0a6ca1ef74c07
-✅ Auth Token: 822728d6... (verified)
-✅ Phone Number: +1 (715) 883-3365
+✅ Account SID: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+✅ Auth Token: xxxxxxxx... (add your own)
+✅ Phone Number: +1234567890 (get from Twilio)
 ✅ SMS Mode: REAL (MOCK_OTP=false)
 ✅ Backend: RESTARTED with new config
 ```

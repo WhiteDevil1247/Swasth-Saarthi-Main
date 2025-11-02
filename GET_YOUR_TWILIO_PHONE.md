@@ -5,10 +5,10 @@
 Your Twilio credentials are **VALID and ACTIVE**:
 
 ```
-Account SID: AC7c2ebbdc3b0a7f7d13d0a6ca1ef74c07
-Auth Token: 822728d6... ✅ VERIFIED
-Account Status: Active
-Account Type: Trial
+Account SID: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (from Twilio Console)
+Auth Token: xxxxxxxx... (from Twilio Console)
+Account Status: Check at console.twilio.com
+Account Type: Trial/Paid
 Created: June 9, 2021
 ```
 

@@ -21,9 +21,9 @@
 - **Configuration**:
   ```env
   MOCK_OTP=false
-  TWILIO_ACCOUNT_SID=AC7c2ebbdc3b0a7f7d13d0a6ca1ef74c07
-  TWILIO_AUTH_TOKEN=cd2454baa75e0a9685adde9fa8006122
-  TWILIO_FROM=+12345678900
+  TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # Your SID
+  TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # Your Token
+  TWILIO_FROM=+1234567890  # Your Twilio Number
   ```
 - **Features**:
   - Real SMS OTP sending to phone numbers

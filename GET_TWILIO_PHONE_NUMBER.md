@@ -3,9 +3,9 @@
 ## ⚠️ CRITICAL: You need a Twilio phone number to send SMS!
 
 **Current Status:**
-- ✅ TWILIO_ACCOUNT_SID: AC7c2ebbdc3b0a7f7d13d0a6ca1ef74c07
-- ✅ TWILIO_AUTH_TOKEN: cd2454baa75e0a9685adde9fa8006122
-- ❌ TWILIO_FROM: +12345678900 (placeholder - NEEDS UPDATE!)
+- ⚠️ TWILIO_ACCOUNT_SID: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Add your SID from Twilio)
+- ⚠️ TWILIO_AUTH_TOKEN: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Add your token from Twilio)
+- ❌ TWILIO_FROM: +1234567890 (Add your Twilio phone number)
 
 ---
 
@@ -73,8 +73,8 @@ TWILIO_FROM=+15551234567  ← Replace with your number
 ### **Example Complete Configuration:**
 ```env
 MOCK_OTP=false
-TWILIO_ACCOUNT_SID=AC7c2ebbdc3b0a7f7d13d0a6ca1ef74c07
-TWILIO_AUTH_TOKEN=cd2454baa75e0a9685adde9fa8006122
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  ← YOUR ACCOUNT SID
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  ← YOUR AUTH TOKEN
 TWILIO_FROM=+15551234567  ← YOUR REAL TWILIO NUMBER
 ```
 
@@ -218,11 +218,11 @@ https://console.twilio.com/us1/monitor/logs/sms
 
 ## 🎯 **WHAT YOU HAVE vs WHAT YOU NEED**
 
-### **✅ You Already Have:**
-- Account SID: AC7c2ebbdc3b0a7f7d13d0a6ca1ef74c07
-- Auth Token: cd2454baa75e0a9685adde9fa8006122
-- Google Client ID: (set up)
-- Google Secret: (set up)
+### **✅ You Need To Get:**
+- Account SID: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (from console.twilio.com)
+- Auth Token: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (from console.twilio.com)
+- Google Client ID: (optional - for calendar integration)
+- Google Secret: (optional - for calendar integration)
 
 ### **❌ You Still Need:**
 - **Twilio Phone Number** ← GET THIS NOW!

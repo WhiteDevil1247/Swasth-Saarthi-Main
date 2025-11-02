@@ -71,9 +71,9 @@ MOCK_OTP=false  ← Changed from true
 
 ### **Current Placeholder Values:**
 ```env
-TWILIO_ACCOUNT_SID=AC7c2ebbdc3b0a7f7d13d0a6ca1ef74c07  ← Replace
-TWILIO_AUTH_TOKEN=cd2454baa75e0a9685adde9fa8006122   ← Replace
-TWILIO_FROM=+12345678900                              ← Replace
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  ← Replace with your SID
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   ← Replace with your token
+TWILIO_FROM=+1234567890                              ← Replace with your number
 ```
 
 ### **Update with Your Real Credentials:**
@@ -82,9 +82,9 @@ TWILIO_FROM=+12345678900                              ← Replace
 # File: swasthsaathi-backend/.env
 
 MOCK_OTP=false
-TWILIO_ACCOUNT_SID=AC1234567890abcdef1234567890abcdef  ← Your real SID
-TWILIO_AUTH_TOKEN=your_real_auth_token_32_chars        ← Your real token
-TWILIO_FROM=+15551234567                               ← Your Twilio number
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  ← Your real SID from Twilio
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx    ← Your real token from Twilio
+TWILIO_FROM=+1234567890                                ← Your Twilio phone number
 ```
 
 ---
