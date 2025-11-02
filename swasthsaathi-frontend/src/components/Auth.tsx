@@ -369,55 +369,6 @@ export default function Auth() {
               </Button>
             </motion.form>
           )}
-
-          {step === "profile" && (
-            <motion.form
-              key="profile"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              onSubmit={handleCompleteProfile}
-              className="space-y-4"
-            >
-              <div className="text-center mb-4">
-                <User className="w-12 h-12 mx-auto text-primary mb-2" />
-                <h3 className="text-xl font-semibold">Complete Your Profile</h3>
-                <p className="text-sm text-muted-foreground">Help us personalize your experience</p>
-              </div>
-              
-              <div>
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="mt-2"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="age">Age</Label>
-                <Input
-                  id="age"
-                  type="number"
-                  placeholder="Enter your age"
-                  value={age}
-                  onChange={(e) => setAge(e.target.value)}
-                  required
-                  min="1"
-                  max="120"
-                  className="mt-2"
-                />
-              </div>
-              
-              <Button type="submit" className="w-full" disabled={loading} size="lg">
-                {loading ? "Saving..." : "Complete Setup"}
-              </Button>
-            </motion.form>
-          )}
             </AnimatePresence>
           </TabsContent>
 
