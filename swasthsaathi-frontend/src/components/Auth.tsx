@@ -268,17 +268,16 @@ export default function Auth() {
         <div className="text-center mb-6">
           {/* Red Medical Logo */}
           <div className="flex justify-center mb-4">
-            <div className="relative w-20 h-20 animate-logo-pulse animate-red-glow">
+            <div className="relative w-20 h-20">
               {/* Red Plus Symbol */}
-              <div className="absolute inset-0 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center animate-float">
                 <div className="relative w-16 h-16">
-                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-5 bg-gradient-to-r from-red-500 to-red-600 rounded-full shadow-lg"></div>
-                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-5 bg-gradient-to-b from-red-500 to-red-600 rounded-full shadow-lg"></div>
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-5 bg-gradient-to-r from-red-500 to-red-600 rounded-full"></div>
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-5 bg-gradient-to-b from-red-500 to-red-600 rounded-full"></div>
                 </div>
               </div>
-              {/* Pulse Animation Rings */}
-              <div className="absolute inset-0 rounded-full border-4 border-red-500/30 animate-ping"></div>
-              <div className="absolute inset-0 rounded-full border-2 border-red-400/20 animate-ping" style={{ animationDelay: '0.5s' }}></div>
+              {/* Subtle Pulse Ring */}
+              <div className="absolute inset-0 rounded-full border-4 border-red-500/20 animate-ping"></div>
             </div>
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift mb-1">
