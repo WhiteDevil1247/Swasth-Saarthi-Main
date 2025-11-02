@@ -2,21 +2,69 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, MapPin, Phone, ExternalLink } from "lucide-react";
+import { Search, MapPin, Phone, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useHospitals } from "@/hooks/useHospitals";
+import { useToast } from "@/hooks/use-toast";
 
 export default function HospitalNavigator() {
   const [search, setSearch] = useState("");
   const [near, setNear] = useState<{ lat?: number; lng?: number }>({});
+  const [locating, setLocating] = useState(false);
   const { data, isLoading, refetch } = useHospitals({ search, lat: near.lat, lng: near.lng, radiusKm: near.lat && near.lng ? 10 : undefined, limit: 50 });
+  const { toast } = useToast();
 
   function findNearMe() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((pos) => {
-      setNear({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      refetch();
+    if (!navigator.geolocation) {
+      toast({
+        title: "Location Not Supported",
+        description: "Your browser doesn't support geolocation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLocating(true);
+    toast({
+      title: "Getting your location...",
+      description: "Please allow location access when prompted.",
     });
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setNear({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocating(false);
+        toast({
+          title: "Location Found! 📍",
+          description: `Searching hospitals near you...`,
+          className: "bg-green-600 text-white border-green-700",
+        });
+        setTimeout(() => refetch(), 100);
+      },
+      (error) => {
+        setLocating(false);
+        let errorMessage = "Unable to get your location.";
+        
+        if (error.code === error.PERMISSION_DENIED) {
+          errorMessage = "Location permission denied. Please enable location access in your browser settings.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          errorMessage = "Location information unavailable.";
+        } else if (error.code === error.TIMEOUT) {
+          errorMessage = "Location request timed out. Please try again.";
+        }
+
+        toast({
+          title: "Location Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
   }
 
   return (
@@ -37,8 +85,16 @@ export default function HospitalNavigator() {
           <Button onClick={() => refetch()}>
             <Search className="w-4 h-4" />
           </Button>
-          <Button variant="secondary" onClick={findNearMe}>
-            <MapPin className="w-4 h-4 mr-1" /> Near me
+          <Button variant="secondary" onClick={findNearMe} disabled={locating}>
+            {locating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" /> Locating...
+              </>
+            ) : (
+              <>
+                <MapPin className="w-4 h-4 mr-1" /> Near me
+              </>
+            )}
           </Button>
         </div>
       </Card>
