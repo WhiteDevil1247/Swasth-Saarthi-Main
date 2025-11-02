@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import EmergencyQR from "./pages/EmergencyQR";
 import AIHealthTimeline from "./pages/AIHealthTimeline";
 import VernacularAssistant from "./pages/VernacularAssistant";
+import Terms from "./pages/Terms";
 
 const queryClient = new QueryClient();
 
@@ -27,23 +28,31 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <ProtectedRoute>
-          <Routes>
-            <Route path="/" element={<Layout><Home /></Layout>} />
-            <Route path="/health-vault" element={<Layout><HealthVault /></Layout>} />
-            <Route path="/ai-companion" element={<Layout><AICompanion /></Layout>} />
-            <Route path="/hospital-navigator" element={<Layout><HospitalNavigator /></Layout>} />
-            <Route path="/teleconsultation" element={<Layout><Teleconsultation /></Layout>} />
-            <Route path="/ngo-hub" element={<Layout><NGOHub /></Layout>} />
-            <Route path="/emergency" element={<Layout><Emergency /></Layout>} />
-            <Route path="/emergency-qr" element={<Layout><EmergencyQR /></Layout>} />
-            <Route path="/ai-health-timeline" element={<Layout><AIHealthTimeline /></Layout>} />
-            <Route path="/assistant" element={<Layout><VernacularAssistant /></Layout>} />
-            <Route path="/accessibility" element={<Layout><Accessibility /></Layout>} />
-            <Route path="/settings" element={<Layout><Settings /></Layout>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </ProtectedRoute>
+        <Routes>
+          {/* Public route - accessible without authentication */}
+          <Route path="/terms" element={<Terms />} />
+          
+          {/* Protected routes - require authentication */}
+          <Route path="*" element={
+            <ProtectedRoute>
+              <Routes>
+                <Route path="/" element={<Layout><Home /></Layout>} />
+                <Route path="/health-vault" element={<Layout><HealthVault /></Layout>} />
+                <Route path="/ai-companion" element={<Layout><AICompanion /></Layout>} />
+                <Route path="/hospital-navigator" element={<Layout><HospitalNavigator /></Layout>} />
+                <Route path="/teleconsultation" element={<Layout><Teleconsultation /></Layout>} />
+                <Route path="/ngo-hub" element={<Layout><NGOHub /></Layout>} />
+                <Route path="/emergency" element={<Layout><Emergency /></Layout>} />
+                <Route path="/emergency-qr" element={<Layout><EmergencyQR /></Layout>} />
+                <Route path="/ai-health-timeline" element={<Layout><AIHealthTimeline /></Layout>} />
+                <Route path="/assistant" element={<Layout><VernacularAssistant /></Layout>} />
+                <Route path="/accessibility" element={<Layout><Accessibility /></Layout>} />
+                <Route path="/settings" element={<Layout><Settings /></Layout>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </ProtectedRoute>
+          } />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

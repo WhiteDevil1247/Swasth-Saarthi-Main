@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { Phone, KeyRound, User } from "lucide-react";
+import { Link } from "react-router-dom";
 
 type AuthStep = "phone" | "otp" | "profile";
 type AuthMode = "signin" | "signup";
@@ -20,22 +21,65 @@ export default function Auth() {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [resendAttempts, setResendAttempts] = useState(0);
+  const [isBlocked, setIsBlocked] = useState(false);
   const { toast } = useToast();
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [resendTimer]);
 
   const handleRequestOtp = async (e?: React.FormEvent, isResend = false) => {
     if (e) e.preventDefault();
     if (!phone) return;
     
+    // Format phone number - add +91 if not present
+    let formattedPhone = phone.trim();
+    if (!formattedPhone.startsWith('+')) {
+      // Assume India if no country code
+      formattedPhone = '+91' + formattedPhone.replace(/^0+/, '');
+    }
+    
     setLoading(true);
     try {
       await api("/auth/request-otp", { 
         method: "POST", 
-        body: { phone }, 
+        body: { phone: formattedPhone }, 
         auth: false 
       });
       
       if (!isResend) {
         setStep("otp");
+        setResendAttempts(0);
+      } else {
+        // Increment attempts and set timer
+        const newAttempts = resendAttempts + 1;
+        setResendAttempts(newAttempts);
+        
+        // Set timer based on attempt number
+        if (newAttempts === 1) {
+          setResendTimer(30); // 30 seconds
+        } else if (newAttempts === 2) {
+          setResendTimer(59); // 59 seconds
+        } else if (newAttempts === 3) {
+          setResendTimer(60); // 60 seconds
+        } else {
+          // Block after 3 attempts
+          setIsBlocked(true);
+          toast({
+            title: "Too Many Attempts",
+            description: "Please try again later.",
+            variant: "destructive"
+          });
+          return;
+        }
       }
       
       // Show success message without code
@@ -48,7 +92,7 @@ export default function Auth() {
     } catch (error: any) {
       toast({ 
         title: "Error", 
-        description: error?.message || "Failed to send OTP", 
+        description: error?.message || "Failed to send OTP. Please check your phone number and try again.", 
         variant: "destructive" 
       });
     } finally {
@@ -57,6 +101,24 @@ export default function Auth() {
   };
 
   const handleResendOtp = () => {
+    if (isBlocked) {
+      toast({
+        title: "Blocked",
+        description: "Too many attempts. Please try again later.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (resendTimer > 0) {
+      toast({
+        title: "Please Wait",
+        description: `You can resend in ${resendTimer} seconds`,
+        variant: "destructive"
+      });
+      return;
+    }
+    
     handleRequestOtp(undefined, true);
   };
 
@@ -64,11 +126,17 @@ export default function Auth() {
     e.preventDefault();
     if (!otp) return;
     
+    // Format phone number same way as request
+    let formattedPhone = phone.trim();
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+91' + formattedPhone.replace(/^0+/, '');
+    }
+    
     setLoading(true);
     try {
       const data = await api("/auth/verify", { 
         method: "POST", 
-        body: { phone, code: otp }, 
+        body: { phone: formattedPhone, code: otp }, 
         auth: false 
       });
       
@@ -77,21 +145,48 @@ export default function Auth() {
       
       localStorage.setItem("auth_token", token);
       
-      // Check if profile exists
+      // For Sign Up mode, always show profile step
+      if (mode === "signup") {
+        setStep("profile");
+        toast({ title: "Verified! ✅", description: "Complete your profile to continue" });
+        return;
+      }
+      
+      // For Sign In mode, check if profile exists
       const hasProfile = localStorage.getItem("user_profile_complete");
       if (hasProfile) {
         toast({ title: "Welcome Back! 👋", description: "Logging you in..." });
         setTimeout(() => window.location.reload(), 1000);
       } else {
+        // User doesn't exist, redirect to sign up
+        toast({ 
+          title: "Account Not Found", 
+          description: "Please sign up to create an account", 
+          variant: "destructive" 
+        });
+        setMode("signup");
         setStep("profile");
-        toast({ title: "Verified! ✅", description: "Let's set up your profile" });
       }
     } catch (error: any) {
-      toast({ 
-        title: "Verification Failed", 
-        description: error?.message || "Invalid OTP code", 
-        variant: "destructive" 
-      });
+      // If it's a Sign In attempt and user not found, suggest Sign Up
+      if (mode === "signin" && error?.message?.toLowerCase().includes("not found")) {
+        toast({ 
+          title: "Invalid Credentials", 
+          description: "No account found. Please sign up first!", 
+          variant: "destructive" 
+        });
+        setTimeout(() => {
+          setMode("signup");
+          setStep("phone");
+          setOtp("");
+        }, 2000);
+      } else {
+        toast({ 
+          title: "Verification Failed", 
+          description: error?.message || "Invalid OTP code", 
+          variant: "destructive" 
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -101,21 +196,39 @@ export default function Auth() {
     e.preventDefault();
     if (!name || !age) return;
     
+    // Format phone number
+    let formattedPhone = phone.trim();
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+91' + formattedPhone.replace(/^0+/, '');
+    }
+    
     setLoading(true);
     try {
       // Save profile to backend
       await api("/profile", {
         method: "POST",
-        body: { name, age: parseInt(age), phone },
+        body: { name, age: parseInt(age), phone: formattedPhone },
         auth: true
       });
       
+      // Store profile data in localStorage
       localStorage.setItem("user_profile_complete", "true");
-      toast({ title: "Profile Complete! 🎉", description: "Welcome to Swasth Saarthi" });
+      localStorage.setItem("user_profile", JSON.stringify({ 
+        name, 
+        age: parseInt(age), 
+        phone: formattedPhone 
+      }));
+      
+      toast({ title: "Profile Complete! 🎉", description: "Welcome to Swasth Saathi" });
       setTimeout(() => window.location.reload(), 1000);
     } catch (error: any) {
       // Even if backend fails, let them proceed
       localStorage.setItem("user_profile_complete", "true");
+      localStorage.setItem("user_profile", JSON.stringify({ 
+        name, 
+        age: parseInt(age), 
+        phone: formattedPhone 
+      }));
       toast({ title: "Welcome! 🎉", description: "You're all set" });
       setTimeout(() => window.location.reload(), 1000);
     } finally {
@@ -178,14 +291,14 @@ export default function Auth() {
                 <Input
                   id="phone"
                   type="tel"
-                  placeholder="+91 99999 99999"
+                  placeholder="9876543210"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   required
                   className="mt-2"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  We'll send you a verification code
+                  Enter 10-digit mobile number (India: +91 will be added automatically)
                 </p>
               </div>
               <Button type="submit" className="w-full" disabled={loading} size="lg">
@@ -231,9 +344,11 @@ export default function Auth() {
                 variant="outline"
                 className="w-full"
                 onClick={handleResendOtp}
-                disabled={loading}
+                disabled={loading || resendTimer > 0 || isBlocked}
               >
-                {loading ? "Sending..." : "Resend Code"}
+                {loading ? "Sending..." : 
+                 isBlocked ? "Try Again Later" :
+                 resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend Code"}
               </Button>
               
               <Button type="submit" className="w-full" disabled={loading} size="lg">
@@ -320,14 +435,14 @@ export default function Auth() {
                 <Input
                   id="phone-signup"
                   type="tel"
-                  placeholder="+91 99999 99999"
+                  placeholder="9876543210"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   required
                   className="mt-2"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  We'll send you a verification code to get started
+                  Enter 10-digit mobile number (India: +91 will be added automatically)
                 </p>
               </div>
               <Button type="submit" className="w-full" disabled={loading} size="lg">
@@ -373,9 +488,11 @@ export default function Auth() {
                 variant="outline"
                 className="w-full"
                 onClick={handleResendOtp}
-                disabled={loading}
+                disabled={loading || resendTimer > 0 || isBlocked}
               >
-                {loading ? "Sending..." : "Resend Code"}
+                {loading ? "Sending..." : 
+                 isBlocked ? "Try Again Later" :
+                 resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend Code"}
               </Button>
               
               <Button type="submit" className="w-full" disabled={loading} size="lg">
@@ -445,7 +562,12 @@ export default function Auth() {
         </Tabs>
 
         <div className="mt-6 text-center text-xs text-muted-foreground">
-          <p>By continuing, you agree to our Terms of Service</p>
+          <p>
+            By continuing, you agree to our{" "}
+            <Link to="/terms" className="text-primary hover:underline">
+              Terms of Service
+            </Link>
+          </p>
         </div>
       </Card>
     </div>
