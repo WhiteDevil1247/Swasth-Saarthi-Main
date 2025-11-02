@@ -161,7 +161,7 @@ export default function Auth() {
         // User doesn't exist, redirect to sign up
         toast({ 
           title: "Account Not Found", 
-          description: "Please go to Sign Up to create an account", 
+          description: "Redirecting you to Sign Up...", 
           variant: "destructive" 
         });
         // Reset state and switch to Sign Up tab
@@ -170,21 +170,36 @@ export default function Auth() {
           setStep("phone");
           setPhone("");
           setOtp("");
-        }, 2000);
+          setName("");
+          setAge("");
+          toast({
+            title: "Create Your Account",
+            description: "Please sign up to continue",
+            className: "bg-blue-600 text-white border-blue-700"
+          });
+        }, 1500);
       }
     } catch (error: any) {
       // If it's a Sign In attempt and user not found, suggest Sign Up
       if (mode === "signin" && error?.message?.toLowerCase().includes("not found")) {
         toast({ 
           title: "Invalid Credentials", 
-          description: "No account found. Please sign up first!", 
+          description: "Redirecting you to Sign Up...", 
           variant: "destructive" 
         });
         setTimeout(() => {
           setMode("signup");
           setStep("phone");
+          setPhone("");
           setOtp("");
-        }, 2000);
+          setName("");
+          setAge("");
+          toast({
+            title: "Create Your Account",
+            description: "Please sign up to continue",
+            className: "bg-blue-600 text-white border-blue-700"
+          });
+        }, 1500);
       } else {
         toast({ 
           title: "Verification Failed", 
