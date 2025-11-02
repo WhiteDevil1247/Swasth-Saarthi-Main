@@ -60,6 +60,3 @@ npm run build
 The build files will appear in the /dist folder.
 
 
-Manik Prsnl
-Frontend Developer • UI/UX Enthusiast
-📍 GitHub: @manikprsnl
