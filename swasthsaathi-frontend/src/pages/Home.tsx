@@ -10,6 +10,7 @@ import {
   Shield,
   Activity,
   Calendar,
+  Accessibility,
 } from "lucide-react";
 
 const features = [
@@ -54,6 +55,13 @@ const features = [
     description: "Quick access to emergency services and contacts",
     color: "text-destructive",
     path: "/emergency",
+  },
+  {
+    icon: Accessibility,
+    title: "Accessibility Hub",
+    description: "Inclusive healthcare tools for everyone, with voice navigation and support",
+    color: "text-primary",
+    path: "/accessibility",
   },
 ];
 
