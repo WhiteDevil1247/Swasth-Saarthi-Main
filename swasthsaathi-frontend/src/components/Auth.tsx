@@ -286,7 +286,7 @@ export default function Auth() {
           <p className="text-sm text-muted-foreground">AI-Powered Healthcare Companion</p>
         </div>
 
-        <Tabs defaultValue="signin" className="w-full" onValueChange={(v) => setMode(v as AuthMode)}>
+        <Tabs value={mode} className="w-full" onValueChange={(v) => setMode(v as AuthMode)}>
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="signin">Sign In</TabsTrigger>
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
