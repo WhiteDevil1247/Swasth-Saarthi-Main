@@ -75,6 +75,16 @@ export function Layout({ children }: LayoutProps) {
         {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
       </Button>
 
+      {/* Profile Icon - Top Right */}
+      <Link to="/profile" className="fixed top-4 right-4 z-50">
+        <Button
+          size="icon"
+          className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent shadow-lg hover:shadow-glow hover:scale-110 transition-all"
+          aria-label="Go to Profile"
+        >
+          <UserCircle className="h-6 w-6 text-white" />
+        </Button>
+      </Link>
 
       {/* Sidebar */}
       <aside
