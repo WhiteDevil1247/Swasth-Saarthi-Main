@@ -42,17 +42,18 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      navigate("/");
-      toast({
-        title: "Logged out successfully",
-        description: "See you soon!",
-      });
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+  const handleLogout = () => {
+    // Clear all auth data
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("user_profile_complete");
+    
+    toast({
+      title: "Logged out successfully",
+      description: "See you soon!",
+    });
+    
+    // Navigate to auth page
+    navigate("/auth");
   };
 
   return (
