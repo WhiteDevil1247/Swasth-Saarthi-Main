@@ -126,8 +126,11 @@ app.post('/api/auth/request-otp', async (req: Request, res: Response) => {
   } else {
     // Dev mode: fixed code
     const otpStore = (global as any).otpStore || ((global as any).otpStore = new Map());
-    otpStore.set(phone, { otp: '123456', expiresAt: Date.now() + 5 * 60 * 1000 });
-    res.json({ success: true, code: '123456', message: 'Mock OTP (dev mode)' });
+    const mockOtp = '123456';
+    otpStore.set(phone, { otp: mockOtp, expiresAt: Date.now() + 5 * 60 * 1000 });
+    console.log(`📱 Mock OTP stored for ${phone}: "${mockOtp}"`);
+    console.log(`   Store size: ${otpStore.size} entries`);
+    res.json({ success: true, code: mockOtp, message: 'Mock OTP (dev mode)' });
   }
 });
 
@@ -141,18 +144,32 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
   const otpStore = (global as any).otpStore || new Map();
   const stored = otpStore.get(phone);
   
+  console.log(`🔐 OTP Verification attempt for ${phone}`);
+  console.log(`   Received code: "${code}"`);
+  console.log(`   Stored OTP: "${stored?.otp}"`);
+  console.log(`   Code match: ${code === stored?.otp}`);
+  
   if (!stored) {
+    console.log(`❌ OTP not found for ${phone}`);
     return res.status(401).json({ error: 'OTP not found or expired. Please request a new one.' });
   }
   
   if (Date.now() > stored.expiresAt) {
+    console.log(`❌ OTP expired for ${phone}`);
     otpStore.delete(phone);
     return res.status(401).json({ error: 'OTP expired. Please request a new one.' });
   }
   
-  if (code !== stored.otp) {
+  // Trim whitespace and compare
+  const trimmedCode = code.trim();
+  const trimmedStoredOtp = stored.otp.trim();
+  
+  if (trimmedCode !== trimmedStoredOtp) {
+    console.log(`❌ Invalid OTP for ${phone}: got "${trimmedCode}" expected "${trimmedStoredOtp}"`);
     return res.status(401).json({ error: 'Invalid OTP code' });
   }
+  
+  console.log(`✅ OTP verified successfully for ${phone}`);
   
   // Clear used OTP
   otpStore.delete(phone);
