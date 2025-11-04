@@ -1,140 +1,160 @@
-SwasthSaathi — Smart Healthcare Platform
+# 🩺 SwasthSaathi — Empowering Smarter Healthcare
 
-SwasthSaathi is a modern, full-stack healthcare platform designed to simplify patient management, teleconsultation, and AI-assisted diagnostics.
-Built with Next.js, Node.js (TypeScript), and Flutter, it delivers an integrated web + mobile experience for healthcare providers and patients alike.
+**SwasthSaathi** is a full-stack health management platform built to simplify patient–doctor interactions, enable secure teleconsultations, AI-powered insights, and digital health record management — all in one modern, cloud-ready app.
 
-🚀 Features
+---
 
-HealthVault — Upload, store, and view medical files securely
-Teleconsultation Signalling — Real-time communication via WebSocket
-Secure Authentication — OTP + JWT-based mock auth flow
-AI Inference Endpoint — Mock AI service (ready for TensorFlow Serving integration)
-Infrastructure Ready — Dockerized setup for local & production environments
-Automated Tests — Playwright smoke tests for health checks
-Mobile Companion App — Flutter scaffold ready for Android/iOS
-Docs Included — Setup, environment, and troubleshooting guides
+## 🚀 Overview
 
-🧱 Tech Stack
-Layer	Technology
-Frontend	Next.js 14 (App Router, TailwindCSS, TypeScript)
-Backend	Node.js, Express, TypeScript
-Database	PostgreSQL (with optional MongoDB + Redis)
-Infra	Docker, Docker Compose
-Testing	Playwright (E2E smoke tests)
-Mobile	Flutter (Dart)
-Deployment	Vercel (Frontend) + Render/Railway (Backend)
-⚙️ Local Setup
-1️⃣ Clone the repo
-git clone https://github.com/<your-username>/swasthsaathi.git
-cd swasthsaathi
+SwasthSaathi provides a connected ecosystem for patients, doctors, hospitals, and NGOs.  
+It supports video consultations, appointment scheduling, AI assistance, and document uploads, powered by scalable backend microservices.
 
-2️⃣ Setup environment variables
+---
+
+## 🧠 Key Features
+
+### 🩹 Core Healthcare Platform
+- Secure patient registration and login (OTP/JWT mock auth)
+- Appointment scheduling and management
+- Real-time teleconsultation using WebRTC signaling
+- HealthVault: file uploads and document management
+- AI insights mock endpoint (extendable to real ML models)
+
+### ⚙️ Technical Highlights
+- **Frontend:** Next.js 14 + Tailwind + shadcn/ui  
+- **Backend:** Node.js (Express + TypeScript)  
+- **Database:** PostgreSQL (main) + MongoDB + Redis  
+- **Infra:** Docker Compose orchestration  
+- **Auth:** Mock OTP & JWT flow  
+- **Realtime:** WebSocket signaling server  
+- **AI Mock:** Simulated ML responses (TF-Serving-ready)  
+- **Testing:** Playwright smoke tests (4/4 passing)
+
+### 📱 Mobile (Flutter)
+- Minimal Flutter app scaffolded with environment wiring and health-check.
+- Ready for expansion into patient dashboards or on-the-go doctor panels.
+
+---
+
+## 🧩 Project Structure
+
+```
+SwasthSaathi/
+├── backend/                  # Node.js + TypeScript Express API
+│   ├── src/                  # Core logic (auth, uploads, AI, signaling)
+│   ├── Dockerfile
+│   └── package.json
+│
+├── healthcare-main/          # Next.js frontend (web client)
+│   ├── app/
+│   ├── components/
+│   ├── tests/                # Playwright smoke tests
+│   └── Dockerfile
+│
+├── mobile/healthsaathi_flutter/ # Flutter client (scaffolded)
+│
+├── scripts/                  # migrate.sh, seed_dev.sh, start scripts
+├── docker-compose.yml         # Full stack orchestration
+├── .env.local.example         # Environment template
+├── README.md                  # This file
+└── REPORT.md                  # Root-cause and deployment summary
+```
+
+---
+
+## 🧰 Local Development Setup
+
+### Prerequisites
+- Node.js ≥ 18  
+- Docker Desktop (for Compose stack)  
+- Git, npm, and optionally Flutter SDK  
+
+### 1️⃣ Clone & Setup
+```bash
+git clone https://github.com/<your-username>/SwasthSaathi.git
+cd SwasthSaathi
 cp .env.local.example .env.local
+```
 
-
-Fill in required keys (Postgres, JWT secret, etc.)
-
-3️⃣ Run using Docker (recommended)
+### 2️⃣ Start with Docker (recommended)
+```bash
 docker compose up --build
+```
+Frontend → http://localhost:3000  
+Backend → http://localhost:8000/api/health  
 
-
-Frontend: http://localhost:3000
-
-Backend: http://localhost:8000/api/health
-
-HealthVault Demo: http://localhost:3000/healthvault
-
-Signalling Demo: http://localhost:3000/signalling
-
-4️⃣ Run locally (no Docker)
-Backend
+### 3️⃣ Run Locally (no Docker)
+```bash
+# Backend
 cd backend
 npm install
 npm run dev
 
-Frontend
-cd healthcare-main
+# Frontend
+cd ../healthcare-main
 npm install
 npm run dev
+```
 
-🧪 Running Tests
+### 4️⃣ Database Setup
+```bash
+./scripts/migrate.sh
+./scripts/seed_dev.sh
+```
 
-After the stack is running:
-
+### 5️⃣ Run Smoke Tests
+```bash
 cd healthcare-main
-npm install
 npx playwright install
 npm run test:e2e
+```
+✅ 4/4 Tests Passed  
+- Frontend loads  
+- Backend health OK  
+- Upload/list working  
+- WebSocket signaling connects
 
+---
 
-✅ All smoke tests should pass:
+## 🌍 Deployment (Recommended)
 
-Frontend loads
+**Frontend:** [Vercel](https://vercel.com)  
+**Backend:** [Render](https://render.com) or [Railway](https://railway.app)
 
-Backend health check
-
-File upload & list
-
-WebSocket signalling
-
-🌐 Deployment Guide
-Frontend → Vercel
-
-Project root: healthcare-main/
-
-Env vars:
-
-NEXT_PUBLIC_API_BASE_URL=https://<your-backend-domain>/api
-NEXT_PUBLIC_WEBSOCKET_URL=wss://<your-backend-domain>/signalling
+Environment vars for frontend:
+```
+NEXT_PUBLIC_API_BASE_URL=https://<backend-domain>/api
+NEXT_PUBLIC_WEBSOCKET_URL=wss://<backend-domain>/signalling
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=<your_key>
+```
 
-Backend → Render / Railway
+---
 
-Root: backend/
+## 🔒 Optional Integrations
+| Feature | Integration | Description |
+|----------|--------------|-------------|
+| ☁️ File Storage | AWS S3 | Replace local storage with S3 |
+| 🤖 AI Models | TF-Serving | Plug real ML inference endpoint |
+| 🔄 TURN Server | coturn / Twilio | Secure P2P video signaling |
+| 💬 Notifications | Twilio / Firebase | SMS or push alerts |
 
-Port: 8000
+---
 
-Copy envs from .env.local.example (production values)
+## 🧪 Production Validation
+- ✅ Backend health: `GET /api/health`
+- ✅ Upload → list in `/healthvault`
+- ✅ Signaling connected successfully
+- ✅ AI mock endpoint returns JSON
+- ✅ JWT + OTP mock flow working
 
-Add managed PostgreSQL + Redis
+---
 
-📱 Flutter Mobile App
+## 🧑‍💻 Maintainer
 
-The mobile app scaffold lives in /mobile/healthsaathi_flutter.
+**SwasthSaathi Project**  
+Built with ❤️ by **Shubham Joshi & Team**
 
-To run:
+---
 
-cd mobile/healthsaathi_flutter
-flutter pub get
-flutter run
-
-
-.env.example included for API config
-
-Uses same base URL as web frontend
-
-📊 Smoke Test Summary
-Test	Status
-Frontend loads	✅
-Backend health check	✅
-Upload & list files	✅
-WebSocket signalling	✅
-
-All tests passed successfully on local validation.
-
-🧠 Future Enhancements
-
-🧬 AI-based diagnosis (TensorFlow Serving)
-
-☁️ AWS S3 integration for cloud file storage
-
-🎥 Full TURN server for real-time teleconsultation
-
-📲 Expanded Flutter mobile client
-
-📋 FHIR-compliant patient data model
-
-🧾 License
-
-This project is open-source under the MIT License.
-Feel free to use, modify, and contribute.
+## 🧾 License
+This project is licensed under the [MIT License](LICENSE).
