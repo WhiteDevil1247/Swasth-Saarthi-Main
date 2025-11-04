@@ -1,4 +1,4 @@
-# 🩺 SwasthSaathi — Empowering Smarter Healthcare
+# SwasthSaathi — Empowering Smarter Healthcare
 
 **SwasthSaathi** is a full-stack health management platform built to simplify patient–doctor interactions, enable secure teleconsultations, AI-powered insights, and digital health record management — all in one modern, cloud-ready app.
 
